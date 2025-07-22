@@ -27,4 +27,5 @@ git push --all origin
 git push --tags origin
 
 
-9002gaE14ZFAWgti@
+git config --global user.email "Jaydip.Barvaliya@td.com"
+git config --global user.name "Jaydip Barvaliya"
