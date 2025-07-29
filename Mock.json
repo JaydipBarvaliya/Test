@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "PUT",
+    "urlPathPattern": "/api/packages/[^/]+/roles/[^/]+",
+    "headers": {
+      "Content-Type": {
+        "equalTo": "application/json"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": "{\n  \"signers\": [\n    {\n      \"id\": \"Signer1\",\n      \"email\": \"mary.doe@example.com\",\n      \"firstName\": \"Mary\",\n      \"lastName\": \"Doe\",\n      \"phone\": \"4168793639\",\n      \"title\": \"title\",\n      \"company\": \"company\",\n      \"auth\": {\n        \"scheme\": \"NONE\"\n      },\n      \"signerType\": \"EXTERNAL_SIGNER\",\n      \"language\": \"en\",\n      \"created\": \"2025-07-29T15:57:47Z\",\n      \"updated\": \"2025-07-29T15:58:01Z\"\n    }\n  ]\n}",
+    "delayDistribution": {
+      "type": "uniform",
+      "lower": 500,
+      "upper": 4000
+    }
+  }
+}
