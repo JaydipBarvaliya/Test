@@ -1,1 +1,1 @@
-./mvnw -U -B -DdryRun=true release:prepare release:perform -s ./release1-ci-settings.xml
+mvn -U -B -DdryRun=true release:prepare release:perform -s release1-ci-settings.xml
