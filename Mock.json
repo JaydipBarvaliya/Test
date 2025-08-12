@@ -1,17 +1,14 @@
-BEGIN
+<appender name="TomcatRollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_PATH}/tomcat.log</file>
+    <encoder>
+        <pattern>${PATTERN}</pattern>
+    </encoder>
 
-UPDATE configuration
-SET prop_value = 'true'
-WHERE app_id = 'esignapi'
-  AND prop_name = 'EXECUTE_PCOE_TEST'
-  AND lob_id IN ('dna', 'dnaus');
-
-UPDATE configuration
-SET prop_value = '192.168.1.25:8080'   -- <- your new IP:PORT
-WHERE app_id = 'esignapi'
-  AND prop_name = 'PCOE_HOST'
-  AND lob_id = 'default';
-
-COMMIT;
-END;
-/
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+        <fileNamePattern>${LOG_PATH}/tomcat.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+        <maxFileSize>${FILE_SIZE}</maxFileSize>          <!-- e.g., 50MB -->
+        <maxHistory>${MAX_FILE_HISTORY}</maxHistory>     <!-- e.g., 30 -->
+        <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        <!-- optional: <totalSizeCap>5GB</totalSizeCap> -->
+    </rollingPolicy>
+</appender>
