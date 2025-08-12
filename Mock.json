@@ -1,1 +1,13 @@
-mvn -U -B -DdryRun=true release:prepare release:perform -s release1-ci-settings.xml
+-- Update EXECUTE_PCOE_TEST for dna and dnaus
+UPDATE CLIENT_APP_CONFIGURATION
+SET PROP_VALUE = 'true'
+WHERE PROP_NAME = 'EXECUTE_PCOE_TEST'
+  AND APP_ID = 'esignapi'
+  AND LOB_ID IN ('dna', 'dnaus');
+
+-- Update PCOE_HOST to new IP:Port
+UPDATE CLIENT_APP_CONFIGURATION
+SET PROP_VALUE = 'NEW.IP.ADDRESS:PORT'
+WHERE PROP_NAME = 'PCOE_HOST'
+  AND APP_ID = 'esignapi'
+  AND LOB_ID = 'default';
