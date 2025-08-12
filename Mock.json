@@ -1,13 +1,17 @@
--- Update EXECUTE_PCOE_TEST for dna and dnaus
-UPDATE CLIENT_APP_CONFIGURATION
-SET PROP_VALUE = 'true'
-WHERE PROP_NAME = 'EXECUTE_PCOE_TEST'
-  AND APP_ID = 'esignapi'
-  AND LOB_ID IN ('dna', 'dnaus');
+BEGIN
 
--- Update PCOE_HOST to new IP:Port
-UPDATE CLIENT_APP_CONFIGURATION
-SET PROP_VALUE = 'NEW.IP.ADDRESS:PORT'
-WHERE PROP_NAME = 'PCOE_HOST'
-  AND APP_ID = 'esignapi'
-  AND LOB_ID = 'default';
+UPDATE configuration
+SET prop_value = 'true'
+WHERE app_id = 'esignapi'
+  AND prop_name = 'EXECUTE_PCOE_TEST'
+  AND lob_id IN ('dna', 'dnaus');
+
+UPDATE configuration
+SET prop_value = '192.168.1.25:8080'   -- <- your new IP:PORT
+WHERE app_id = 'esignapi'
+  AND prop_name = 'PCOE_HOST'
+  AND lob_id = 'default';
+
+COMMIT;
+END;
+/
