@@ -1,14 +1,7 @@
-<appender name="TomcatRollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
-    <file>${LOG_PATH}/tomcat.log</file>
-    <encoder>
-        <pattern>${PATTERN}</pattern>
-    </encoder>
+# 1) Get everything fresh
+git fetch --tags --prune
 
-    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-        <fileNamePattern>${LOG_PATH}/tomcat.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-        <maxFileSize>${FILE_SIZE}</maxFileSize>          <!-- e.g., 50MB -->
-        <maxHistory>${MAX_FILE_HISTORY}</maxHistory>     <!-- e.g., 30 -->
-        <cleanHistoryOnStart>true</cleanHistoryOnStart>
-        <!-- optional: <totalSizeCap>5GB</totalSizeCap> -->
-    </rollingPolicy>
-</appender>
+# 2) List the 10 most recent tags with creator info
+git for-each-ref --sort=-creatordate \
+  --format="%(creatordate:iso) | %(refname:short) | %(objecttype) | %(taggername) <%(taggeremail)> | %(subject)" \
+  refs/tags | head -n 10
