@@ -4,7 +4,7 @@ try {
 
     HttpHeaders httpHeaders = buildHeaders(lobid, messageID, traceabilityID);
 
-    // Get Accept header or default to PDF
+    // Default to PDF if Accept header not provided
     String acceptType = httpHeaders.getAccept().isEmpty()
             ? MediaType.APPLICATION_PDF_VALUE
             : httpHeaders.getAccept().get(0).toString();
@@ -14,16 +14,10 @@ try {
         ResponseEntity<String> response = packageService.getEvidenceJson(
                 httpHeaders, eventId, packageManagerUtil.getLobFromHeader(httpHeaders));
         auditTrailResponse = auditTrailResponseMapper.mapResponse(response, acceptType);
-
-    } else if (MediaType.APPLICATION_PDF_VALUE.equalsIgnoreCase(acceptType)) {
+    } else {
         // Serve PDF
         auditTrailResponse = packageService.getEvidencePdf(
                 httpHeaders, eventId, MediaType.APPLICATION_PDF);
-
-    } else {
-        // Unsupported type
-        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE)
-                .body(statusFrom("Only application/json or application/pdf are supported"));
     }
 
 } catch (SharedServiceLayerException e) {
