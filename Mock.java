@@ -1,64 +1,15 @@
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+String acceptType = (acceptType == null || acceptType.isBlank())
+        ? MediaType.APPLICATION_PDF_VALUE
+        : acceptType;
 
-// ...
-
-public ResponseEntity<RetrieveESignatureEventAuditTrailSummaryRs> getEvidenceSummary(
-    String eventId,
-    String lobid,
-    String messageID,
-    String traceabilityID) {
-
-  HttpHeaders httpHeaders = buildHeaders(lobid, messageID, traceabilityID);
-
-  // --- negotiate Accept header (default to PDF) ---
-  MediaType accept = negotiateAccept(httpHeaders);   // << new helper below
-
-  try {
-    if (MediaType.APPLICATION_JSON.includes(accept) || accept.includes(MediaType.APPLICATION_JSON)) {
-      // Serve JSON
-      return packageService.getEvidenceJson(httpHeaders, eventId, MediaType.APPLICATION_JSON);
-    } else if (MediaType.APPLICATION_PDF.includes(accept) || accept.includes(MediaType.APPLICATION_PDF)) {
-      // Serve PDF
-      return packageService.getEvidencePdf(httpHeaders, eventId, MediaType.APPLICATION_PDF);
-    } else {
-      // Only JSON or PDF are supported
-      return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE)
-          .body(statusFrom("Only application/json or application/pdf are supported"));
-    }
-  } catch (SharedServiceLayerException e) {
-    // your existing mapping—keep as-is if it already maps to proper 4xx/5xx
-    throw new SharedServiceLayerException(e.getStatus(), e.getMessage(), e.getCause());
-  }
-}
-
-/** Resolve the Accept header safely. Default is application/pdf. */
-private static MediaType negotiateAccept(HttpHeaders headers) {
-  if (headers == null) return MediaType.APPLICATION_PDF;
-
-  // e.g., [application/json], [application/pdf], [*/*], or empty
-  var list = headers.getAccept();
-  if (list == null || list.isEmpty() || list.get(0) == null) {
-    return MediaType.APPLICATION_PDF; // default
-  }
-
-  MediaType requested = list.get(0);
-
-  // Treat */* or wildcards as default (PDF)
-  if (requested.isWildcardType() || requested.isWildcardSubtype()) {
-    return MediaType.APPLICATION_PDF;
-  }
-
-  // Normalize to the two types we support
-  if (MediaType.APPLICATION_JSON.includes(requested) || requested.includes(MediaType.APPLICATION_JSON)) {
-    return MediaType.APPLICATION_JSON;
-  }
-  if (MediaType.APPLICATION_PDF.includes(requested) || requested.includes(MediaType.APPLICATION_PDF)) {
-    return MediaType.APPLICATION_PDF;
-  }
-
-  // Unknown → return as-is; caller will 406
-  return requested;
+if (MediaType.APPLICATION_JSON_VALUE.equalsIgnoreCase(acceptType)) {
+    // Serve JSON
+    auditTrailResponse = packageService.getEvidenceJson(httpHeaders, eventId, MediaType.APPLICATION_JSON);
+} else if (MediaType.APPLICATION_PDF_VALUE.equalsIgnoreCase(acceptType)) {
+    // Serve PDF
+    auditTrailResponse = packageService.getEvidencePdf(httpHeaders, eventId, MediaType.APPLICATION_PDF);
+} else {
+    // Unsupported type → 406
+    return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE)
+            .body(statusFrom("Only application/json or application/pdf are supported"));
 }
