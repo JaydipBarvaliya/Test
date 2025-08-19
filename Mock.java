@@ -1,25 +1,20 @@
-try {
-    log.info("EsignatureeventsApiDelegateImpl.getEvidenceSummary(): {}",
-            LogSanitizeUtil.sanitizeLogObj(eventId));
-
-    HttpHeaders httpHeaders = buildHeaders(lobid, messageID, traceabilityID);
-
-    // Default to PDF if Accept header not provided
-    String acceptType = httpHeaders.getAccept().isEmpty()
-            ? MediaType.APPLICATION_PDF_VALUE
-            : httpHeaders.getAccept().get(0).toString();
-
-    if (MediaType.APPLICATION_JSON_VALUE.equalsIgnoreCase(acceptType)) {
-        // Serve JSON
-        ResponseEntity<String> response = packageService.getEvidenceJson(
-                httpHeaders, eventId, packageManagerUtil.getLobFromHeader(httpHeaders));
-        auditTrailResponse = auditTrailResponseMapper.mapResponse(response, acceptType);
-    } else {
-        // Serve PDF
-        auditTrailResponse = packageService.getEvidencePdf(
-                httpHeaders, eventId, MediaType.APPLICATION_PDF);
-    }
-
-} catch (SharedServiceLayerException e) {
-    throw new SharedServiceLayerException(e.getStatus(), e.getMessage(), e.getCause());
-}
+/esignatureevents/{eventId}:
+  delete:
+    summary: Delete one eSignature transaction
+    parameters:
+      - $ref: '#/components/parameters/eventId'
+      - $ref: '#/components/parameters/lobId'
+      - $ref: '#/components/parameters/messageId'
+      - $ref: '#/components/parameters/traceabilityId'
+    requestBody:
+      required: false    # <— optional body; we're only using this to advertise allowed content types
+      content:
+        text/plain:      # allow this if a body is ever sent
+          schema: { type: string }
+        application/json:
+          schema: { type: object, additionalProperties: false }
+    responses:
+      '200':
+        content:
+          text/plain:
+            schema: { type: string, example: "Transaction Deleted." }
