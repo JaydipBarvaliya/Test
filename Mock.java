@@ -1,20 +1,13 @@
-/esignatureevents/{eventId}:
-  delete:
-    summary: Delete one eSignature transaction
-    parameters:
-      - $ref: '#/components/parameters/eventId'
-      - $ref: '#/components/parameters/lobId'
-      - $ref: '#/components/parameters/messageId'
-      - $ref: '#/components/parameters/traceabilityId'
-    requestBody:
-      required: false    # <— optional body; we're only using this to advertise allowed content types
-      content:
-        text/plain:      # allow this if a body is ever sent
-          schema: { type: string }
-        application/json:
-          schema: { type: object, additionalProperties: false }
-    responses:
-      '200':
-        content:
-          text/plain:
-            schema: { type: string, example: "Transaction Deleted." }
+pm.test("Status code is 200", function () {
+    pm.response.to.have.status(200);
+
+    var jsonData = pm.response.json();
+
+    // Check if eventId exists before using it
+    if (jsonData && jsonData.eventId) {
+        console.log("Event ID: " + jsonData.eventId);
+        pm.environment.set("eventId", jsonData.eventId);
+    } else {
+        console.log("eventId is undefined, not setting environment variable");
+    }
+});
