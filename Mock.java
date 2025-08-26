@@ -1,42 +1,61 @@
-@ExtendWith(MockitoExtension.class)
-class EsignatureeventsApiDelegateImplTest {
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 
-    @Mock PackageService packageService;
+import static org.mockito.ArgumentMatchers.*;
+
+@ExtendWith(MockitoExtension.class)
+class EsignatureeventsApiDelegateImpl_GetDocument_Test {
+
+    @Mock DocumentService documentService;            // whatever the real type is
     @Mock PackageManagerUtil packageManagerUtil;
 
-    @InjectMocks EsignatureeventsApiDelegateImpl sut;  // SUT = class under test
+    @InjectMocks EsignatureeventsApiDelegateImpl sut; // Class under test
 
     @Test
-    void getTransaction_throwsSharedServiceLayerException() {
-        // inputs
-        String eventId = "testEventId";
-        String lobId = "lob123";
-        String messageId = "message123";
-        String traceId = "trace123";
+    void getDocument_throwsSharedServiceLayerException_and_covers_catch() {
+        // Arrange
+        String eventId = "evt-1";
+        String documentId = "doc-1";
+        String lobId = "lob-1";
+        String messageId = "msg-1";
+        String traceId = "trace-1";
 
-        // make a spy so we can stub buildHeaders()
+        // If buildHeaders is non-final/non-private, use a spy to control it.
         EsignatureeventsApiDelegateImpl spy = Mockito.spy(sut);
         HttpHeaders headers = new HttpHeaders();
-        Mockito.doReturn(headers)
-               .when(spy).buildHeaders(lobId, messageId, traceId);
+        try {
+            Mockito.doReturn(headers)
+                   .when(spy).buildHeaders(lobId, messageId, traceId);
+        } catch (Exception ignore) {
+            // in case buildHeaders declares checked exceptions
+        }
 
-        // stub the other collaborator used in the method
-        Mockito.when(packageManagerUtil.getLobFromHeader(headers))
-               .thenReturn("dna");
+        // the code reads LOB from headers; give it a value
+        Mockito.when(packageManagerUtil.getLobFromHeader(headers)).thenReturn("dna");
 
-        // prepare the exception the catch block should rethrow
-        Status status = new Status("500", Severity.Error);
-        SharedServiceLayerException toThrow = new SharedServiceLayerException(status);
+        // Prepare the exception that should be caught and rethrown
+        Status status = new Status("500", Severity.Error); // use your real ctor
+        SharedServiceLayerException boom = new SharedServiceLayerException(status);
 
-        // THIS is where the exception must be thrown
-        Mockito.doThrow(toThrow)
-               .when(packageService).getPackage(headers, eventId, "dna");
+        // The key stub: make the *document service* throw
+        Mockito.doThrow(boom).when(documentService)
+                .getDocumentPdfWithStats(eq(headers), eq(eventId), eq(documentId), eq("dna"));
 
-        // assert
+        // Act + Assert
         SharedServiceLayerException ex = Assertions.assertThrows(
             SharedServiceLayerException.class,
-            () -> spy.getTransaction(eventId, lobId, messageId, traceId)
+            () -> spy.getDocument(eventId, documentId, lobId, messageId, traceId)
         );
+
+        // Optional: verify we rethrew with the same status/message (as your catch does)
         Assertions.assertEquals("500", ex.getStatus().getServerStatusCode());
+        Mockito.verify(documentService).getDocumentPdfWithStats(eq(headers), eq(eventId), eq(documentId), eq("dna"));
     }
 }
