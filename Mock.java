@@ -1,7 +1,7 @@
 @Test
-void getAuthenticatedSigningCeremonyURL_throwsSharedServiceLayerException() {
+void getSignature_throwsSharedServiceLayerException() {
     String eventId = "evt-1";
-    String email = "test@example.com";
+    String partyId = "party-1";
     String lobId = "lob-1";
     String messageId = "msg-1";
     String traceId = "trace-1";
@@ -16,11 +16,11 @@ void getAuthenticatedSigningCeremonyURL_throwsSharedServiceLayerException() {
     SharedServiceLayerException boom = new SharedServiceLayerException(status);
 
     Mockito.doThrow(boom).when(signerService)
-            .createSingleSessionSignerAuthenticationUrl(headers, eventId, email, "dna");
+            .getSignatureImage(headers, eventId, partyId, "dna");
 
     SharedServiceLayerException ex = Assertions.assertThrows(
             SharedServiceLayerException.class,
-            () -> spy.getAuthenticatedSigningCeremonyURL(eventId, email, lobId, messageId, traceId)
+            () -> spy.getSignature(eventId, partyId, lobId, messageId, traceId)
     );
 
     Assertions.assertEquals("500", ex.getStatus().getServerStatusCode());
