@@ -1,7 +1,7 @@
 @Test
-void getAttachments_throwsSharedServiceLayerException() {
+void getAuthenticatedSigningCeremonyURL_throwsSharedServiceLayerException() {
     String eventId = "evt-1";
-    String partyId = "party-1";
+    String email = "test@example.com";
     String lobId = "lob-1";
     String messageId = "msg-1";
     String traceId = "trace-1";
@@ -15,12 +15,12 @@ void getAttachments_throwsSharedServiceLayerException() {
     Status status = new Status("500", Severity.Error);
     SharedServiceLayerException boom = new SharedServiceLayerException(status);
 
-    Mockito.doThrow(boom).when(documentService)
-            .getSignerAttachmentsZip(headers, eventId, partyId, "dna");
+    Mockito.doThrow(boom).when(signerService)
+            .createSingleSessionSignerAuthenticationUrl(headers, eventId, email, "dna");
 
     SharedServiceLayerException ex = Assertions.assertThrows(
             SharedServiceLayerException.class,
-            () -> spy.getAttachments(eventId, partyId, lobId, messageId, traceId)
+            () -> spy.getAuthenticatedSigningCeremonyURL(eventId, email, lobId, messageId, traceId)
     );
 
     Assertions.assertEquals("500", ex.getStatus().getServerStatusCode());
