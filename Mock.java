@@ -1,1 +1,1 @@
-netstat -an | grep 8443 | grep -v LISTEN | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr
+TIME_WAIT, CLOSE_WAIT, SYN_RECV, etc. will show up in netstat — those are TCP states. Lots of TIME_WAIT can inflate counts even after traffic stopped.
