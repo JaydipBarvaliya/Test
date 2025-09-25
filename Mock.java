@@ -1,4 +1,1 @@
-INSERT INTO CONFIGURATION 
-    (ID, APP_ID, LOB_ID, PROP_NAME, PROP_VALUE)
-VALUES 
-    (2284, 'esignapi', 'dnaus', 'EXECUTE_PCOE_TEST', 'false');
+netstat -an | grep 8443 | grep -v LISTEN | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr
