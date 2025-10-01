@@ -13,3 +13,8 @@ mvn -v
 java -version
 
 
+
+
+mvn dependency:resolve
+
+
