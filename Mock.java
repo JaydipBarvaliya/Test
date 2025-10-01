@@ -1,1 +1,15 @@
-TIME_WAIT, CLOSE_WAIT, SYN_RECV, etc. will show up in netstat — those are TCP states. Lots of TIME_WAIT can inflate counts even after traffic stopped.
+rm -rf ~/.m2/repository/org/springframework/boot/spring-boot-maven-plugin/3.5.0
+
+mvn clean install
+
+
+
+
+mvn clean install -U
+
+
+
+mvn -v
+java -version
+
+
