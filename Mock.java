@@ -1,20 +1,13 @@
-rm -rf ~/.m2/repository/org/springframework/boot/spring-boot-maven-plugin/3.5.0
+@ResourceLoader
+private ResourceLoader resourceLoader;
 
-mvn clean install
+@Bean
+public JCacheCacheManager cacheManager() throws Exception {
+    CachingProvider cachingProvider = Caching.getCachingProvider();
 
+    Resource resource = resourceLoader.getResource("classpath:ehcache.xml");
+    URI uri = resource.getURI();
 
-
-
-mvn clean install -U
-
-
-
-mvn -v
-java -version
-
-
-
-
-mvn dependency:resolve
-
-
+    CacheManager cacheManager = cachingProvider.getCacheManager(uri, getClass().getClassLoader());
+    return new JCacheCacheManager(cacheManager);
+}
