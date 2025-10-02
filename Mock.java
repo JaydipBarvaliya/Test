@@ -1,7 +1,16 @@
-@Cacheable(value = {"token"}, key = "#lobId")
-public TokenResponse generateAccessToken(String saasUrl, String lobId) {
-    ResponseEntity<String> responseEntity =
-        this.eslGateway.createSessionTokenForSaas(httpHeaders, saasUrl, mapAccessTokenRequest(lobId));
+@Slf4j
+public class CacheEventLogger implements CacheEventListener<Object, Object> {
 
-    return new TokenResponse(responseEntity.getStatusCodeValue(), responseEntity.getBody());
+    @Override
+    public void onEvent(CacheEvent<? extends Object, ? extends Object> cacheEvent) {
+        if (log.isDebugEnabled()) {
+            String maskedNewValue = cacheEvent.getNewValue() != null 
+                    ? cacheEvent.getNewValue().toString().replaceAll("(?<=.{4}).", "*") 
+                    : null;
+
+            log.debug("Cache event [{}]: key={}, oldValue={}, newValue={}", 
+                      cacheEvent.getType(), cacheEvent.getKey(), 
+                      cacheEvent.getOldValue(), maskedNewValue);
+        }
+    }
 }
