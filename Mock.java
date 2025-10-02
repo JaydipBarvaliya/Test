@@ -1,12 +1,7 @@
-public class TokenResponse implements Serializable {
-    private int statusCode;
-    private String body;
+@Cacheable(value = {"token"}, key = "#lobId")
+public TokenResponse generateAccessToken(String saasUrl, String lobId) {
+    ResponseEntity<String> responseEntity =
+        this.eslGateway.createSessionTokenForSaas(httpHeaders, saasUrl, mapAccessTokenRequest(lobId));
 
-    public TokenResponse(int statusCode, String body) {
-        this.statusCode = statusCode;
-        this.body = body;
-    }
-
-    public int getStatusCode() { return statusCode; }
-    public String getBody() { return body; }
+    return new TokenResponse(responseEntity.getStatusCodeValue(), responseEntity.getBody());
 }
