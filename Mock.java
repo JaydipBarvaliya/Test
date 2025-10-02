@@ -1,10 +1,12 @@
-<dependency>
-    <groupId>javax.xml.bind</groupId>
-    <artifactId>jaxb-api</artifactId>
-    <version>2.3.1</version>
-</dependency>
-<dependency>
-    <groupId>org.glassfish.jaxb</groupId>
-    <artifactId>jaxb-runtime</artifactId>
-    <version>2.3.3</version>
-</dependency>
+public class TokenResponse implements Serializable {
+    private int statusCode;
+    private String body;
+
+    public TokenResponse(int statusCode, String body) {
+        this.statusCode = statusCode;
+        this.body = body;
+    }
+
+    public int getStatusCode() { return statusCode; }
+    public String getBody() { return body; }
+}
