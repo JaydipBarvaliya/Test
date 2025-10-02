@@ -1,11 +1,11 @@
-@Bean
-public JCacheCacheManager cacheManager() throws Exception {
-    CachingProvider cachingProvider = Caching.getCachingProvider();
+<dependency>
+    <groupId>jakarta.xml.bind</groupId>
+    <artifactId>jakarta.xml.bind-api</artifactId>
+    <version>3.0.1</version>
+</dependency>
 
-    // absolute file path from config project
-    Resource resource = resourceLoader.getResource("file:/C:/Codebase/GITHUB/aesig-api-config/ehcache.xml");
-
-    URI uri = resource.getURI();
-    CacheManager cacheManager = cachingProvider.getCacheManager(uri, getClass().getClassLoader());
-    return new JCacheCacheManager(cacheManager);
-}
+<dependency>
+    <groupId>org.glassfish.jaxb</groupId>
+    <artifactId>jaxb-runtime</artifactId>
+    <version>3.0.2</version>
+</dependency>
