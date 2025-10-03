@@ -18,47 +18,65 @@ public class CaffeineCacheConfig {
 
     @Bean
     public CaffeineCacheManager cacheManager() {
+        // you can also use new CaffeineCacheManager("token") if you prefer predeclaring
         CaffeineCacheManager cacheManager = new CaffeineCacheManager("token");
 
-        cacheManager.setCaffeine(
-            Caffeine.<String, ResponseEntity<String>>newBuilder()
-                .maximumSize(100)
-                .expireAfter(new Expiry<String, ResponseEntity<String>>() {
-                    @Override
-                    public long expireAfterCreate(String key, ResponseEntity<String> value, long currentTime) {
-                        try {
-                            JSONObject json = (JSONObject) new JSONParser().parse(value.getBody());
-                            long expiresAt = (Long) json.get("expiresAt");
-                            long ttlMillis = expiresAt - System.currentTimeMillis();
-                            // add a 30s buffer
-                            ttlMillis = Math.max(ttlMillis - 30_000, 1_000);
-                            return TimeUnit.MILLISECONDS.toNanos(ttlMillis);
-                        } catch (Exception e) {
-                            // fallback: expire in 5 minutes if parsing fails
-                            return TimeUnit.MINUTES.toNanos(5);
+        // IMPORTANT: Spring expects Caffeine<Object,Object> here
+        Caffeine<Object, Object> builder = Caffeine.newBuilder()
+            .maximumSize(100)
+            .expireAfter(new Expiry<Object, Object>() {
+                @Override
+                public long expireAfterCreate(Object key, Object value, long currentTime) {
+                    try {
+                        // We only expect ResponseEntity<String> values in this cache
+                        if (value instanceof ResponseEntity) {
+                            @SuppressWarnings("unchecked")
+                            ResponseEntity<String> resp = (ResponseEntity<String>) value;
+                            String body = resp.getBody();
+                            if (body != null) {
+                                JSONObject json = (JSONObject) new JSONParser().parse(body);
+                                Object exp = json.get("expiresAt");
+                                if (exp != null) {
+                                    long expiresAt = (exp instanceof Number)
+                                            ? ((Number) exp).longValue()
+                                            : Long.parseLong(String.valueOf(exp));
+                                    long ttlMillis = expiresAt - System.currentTimeMillis();
+                                    // subtract 30s to avoid “expired-in-flight”
+                                    ttlMillis = Math.max(ttlMillis - 30_000, 1_000);
+                                    return TimeUnit.MILLISECONDS.toNanos(ttlMillis);
+                                }
+                            }
                         }
+                        // Fallback TTL if body/parse/field missing
+                        return TimeUnit.MINUTES.toNanos(5);
+                    } catch (Exception e) {
+                        // Fallback TTL if parsing blows up
+                        return TimeUnit.MINUTES.toNanos(5);
                     }
+                }
 
-                    @Override
-                    public long expireAfterUpdate(String key, ResponseEntity<String> value,
-                                                  long currentTime, long currentDuration) {
-                        return expireAfterCreate(key, value, currentTime);
-                    }
+                @Override
+                public long expireAfterUpdate(Object key, Object value,
+                                              long currentTime, long currentDuration) {
+                    // Recompute TTL on update
+                    return expireAfterCreate(key, value, currentTime);
+                }
 
-                    @Override
-                    public long expireAfterRead(String key, ResponseEntity<String> value,
-                                                long currentTime, long currentDuration) {
-                        return currentDuration;
-                    }
-                })
-                .removalListener(new RemovalListener<String, ResponseEntity<String>>() {
-                    @Override
-                    public void onRemoval(String key, ResponseEntity<String> value, RemovalCause cause) {
-                        System.out.printf("Cache removed: key=%s, cause=%s%n", key, cause);
-                    }
-                })
-        );
+                @Override
+                public long expireAfterRead(Object key, Object value,
+                                            long currentTime, long currentDuration) {
+                    // Don’t change expiry on reads
+                    return currentDuration;
+                }
+            })
+            .removalListener(new RemovalListener<Object, Object>() {
+                @Override
+                public void onRemoval(Object key, Object value, RemovalCause cause) {
+                    System.out.printf("Cache removed: key=%s, cause=%s%n", key, cause);
+                }
+            });
 
+        cacheManager.setCaffeine(builder);
         return cacheManager;
     }
 }
