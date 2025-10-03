@@ -1,16 +1,27 @@
-@Slf4j
-public class CacheEventLogger implements CacheEventListener<Object, Object> {
+@Bean
+public CaffeineCacheManager cacheManager() {
+    CaffeineCacheManager cacheManager = new CaffeineCacheManager("token");
+    cacheManager.setCaffeine(
+        Caffeine.newBuilder()
+                .maximumSize(100)
+                .expireAfter(new Expiry<String, TokenResponse>() {
+                    @Override
+                    public long expireAfterCreate(String key, TokenResponse value, long currentTime) {
+                        // Use token's expiresAt minus safety buffer (e.g., 30 seconds)
+                        long ttlMillis = value.getExpiresAt() - System.currentTimeMillis() - 30_000;
+                        return TimeUnit.MILLISECONDS.toNanos(Math.max(ttlMillis, 1000));
+                    }
 
-    @Override
-    public void onEvent(CacheEvent<? extends Object, ? extends Object> cacheEvent) {
-        if (log.isDebugEnabled()) {
-            String maskedNewValue = cacheEvent.getNewValue() != null 
-                    ? cacheEvent.getNewValue().toString().replaceAll("(?<=.{4}).", "*") 
-                    : null;
+                    @Override
+                    public long expireAfterUpdate(String key, TokenResponse value, long currentTime, long currentDuration) {
+                        return expireAfterCreate(key, value, currentTime);
+                    }
 
-            log.debug("Cache event [{}]: key={}, oldValue={}, newValue={}", 
-                      cacheEvent.getType(), cacheEvent.getKey(), 
-                      cacheEvent.getOldValue(), maskedNewValue);
-        }
-    }
+                    @Override
+                    public long expireAfterRead(String key, TokenResponse value, long currentTime, long currentDuration) {
+                        return currentDuration; // don’t reset on reads
+                    }
+                })
+    );
+    return cacheManager;
 }
