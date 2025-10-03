@@ -1,6 +1,7 @@
 @Bean
 public CaffeineCacheManager cacheManager() {
-    CaffeineCacheManager cacheManager = new CaffeineCacheManager("token");
+    CaffeineCacheManager cacheManager = new CaffeineCacheManager();
+    cacheManager.setCacheNames(List.of("token"));
 
     cacheManager.setCaffeine(
         Caffeine.newBuilder()
@@ -14,7 +15,7 @@ public CaffeineCacheManager cacheManager() {
                             long expiresAt = (Long) json.get("expiresAt");
                             long ttlMillis = expiresAt - System.currentTimeMillis();
 
-                            // Add safety buffer (e.g. 30s less)
+                            // Add safety buffer (e.g., 30 seconds less)
                             ttlMillis = Math.max(ttlMillis - 30_000, 1_000);
 
                             return TimeUnit.MILLISECONDS.toNanos(ttlMillis);
@@ -33,11 +34,11 @@ public CaffeineCacheManager cacheManager() {
                     @Override
                     public long expireAfterRead(String key, ResponseEntity<String> value,
                                                 long currentTime, long currentDuration) {
-                        return currentDuration; // don’t reset on read
+                        return currentDuration; // do not reset expiry on read
                     }
                 })
                 .removalListener((key, value, cause) ->
-                        System.out.printf("Cache expired: key=%s, cause=%s%n", key, cause))
+                        System.out.printf("Cache removed: key=%s, cause=%s%n", key, cause))
     );
 
     return cacheManager;
