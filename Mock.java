@@ -1,1 +1,1 @@
-mvn dependency:tree -Dverbose -Dincludes=org.springframework.boot:spring-boot-actuator
+mvn dependency:tree -Dincludes=org.springframework.boot:spring-boot-actuator
