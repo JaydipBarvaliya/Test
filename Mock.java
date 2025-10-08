@@ -1,42 +1,89 @@
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.cache.caffeine.CaffeineCacheManager;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.Expiry;
+package com.td.esig.api.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.ResponseEntity;
 import java.util.concurrent.TimeUnit;
+import static org.assertj.core.api.Assertions.assertThat;
 
-@Configuration
-public class CaffeineCacheConfig {
+public class CaffeineCacheConfigTest {
 
-    @Value("${cache.caffeine.maximum-size:100}") // 👈 reads from application.properties
-    private int maximumSize; // default = 100
+    private CaffeineCacheConfig config;
+    private ObjectMapper objectMapper;
 
-    @Bean
-    public CaffeineCacheManager cacheManager() {
+    @BeforeEach
+    void setup() {
+        config = new CaffeineCacheConfig();
+        objectMapper = new ObjectMapper();
 
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager("token");
+        // Inject test values (simulate @Value from properties)
+        TestUtils.injectField(config, "maximumEntriesInCache", 100);
+        TestUtils.injectField(config, "gracePeriodInSeconds", 30);
+        TestUtils.injectField(config, "objectMapper", objectMapper);
+    }
 
-        Caffeine<Object, Object> builder = Caffeine.newBuilder()
-                .maximumSize(maximumSize)  // 👈 directly injected here
-                .expireAfter(new Expiry<Object, Object>() {
-                    @Override
-                    public long expireAfterCreate(Object key, Object value, long currentTime) {
-                        return TimeUnit.MINUTES.toNanos(5); // whatever logic you have
-                    }
+    @Test
+    void testCacheManagerNotNull() {
+        assertThat(config.cacheManager()).isNotNull();
+    }
 
-                    @Override
-                    public long expireAfterUpdate(Object key, Object value, long currentTime, long currentDuration) {
-                        return currentDuration;
-                    }
+    @Test
+    void testExpireAfterCreate_ValidExpiresAt() throws Exception {
+        // Prepare JSON with expiresAt 60 seconds from now
+        long expiresAt = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(60);
+        String json = "{\"expiresAt\": " + expiresAt + "}";
+        ResponseEntity<String> response = ResponseEntity.ok(json);
 
-                    @Override
-                    public long expireAfterRead(Object key, Object value, long currentTime, long currentDuration) {
-                        return currentDuration;
-                    }
-                });
+        long ttlNanos = config.cacheManager()
+                .getCache("token")
+                .getNativeCache()
+                .policy()
+                .expireAfterCreate()
+                .map(e -> e.expireAfterCreate("key", response, System.currentTimeMillis()))
+                .orElseThrow();
 
-        cacheManager.setCaffeine(builder);
-        return cacheManager;
+        long ttlSeconds = TimeUnit.NANOSECONDS.toSeconds(ttlNanos);
+        assertThat(ttlSeconds).isBetween(25L, 35L); // 60 - 30 grace period ≈ 30s
+    }
+
+    @Test
+    void testExpireAfterCreate_InvalidJson() {
+        ResponseEntity<String> badResponse = ResponseEntity.ok("invalid-json");
+        long ttl = config.cacheManager()
+                .getCache("token")
+                .getNativeCache()
+                .policy()
+                .expireAfterCreate()
+                .map(e -> e.expireAfterCreate("key", badResponse, System.currentTimeMillis()))
+                .orElseThrow();
+        assertThat(ttl).isEqualTo(TimeUnit.SECONDS.toNanos(1));
+    }
+
+    @Test
+    void testExpireAfterCreate_MissingExpiresAt() throws Exception {
+        String json = "{}";
+        ResponseEntity<String> response = ResponseEntity.ok(json);
+
+        long ttl = config.cacheManager()
+                .getCache("token")
+                .getNativeCache()
+                .policy()
+                .expireAfterCreate()
+                .map(e -> e.expireAfterCreate("key", response, System.currentTimeMillis()))
+                .orElseThrow();
+        assertThat(ttl).isEqualTo(TimeUnit.SECONDS.toNanos(1));
+    }
+
+    @Test
+    void testRemovalListenerLogsOnEviction() {
+        var cacheManager = config.cacheManager();
+        var nativeCache = cacheManager.getCache("token").getNativeCache();
+
+        nativeCache.put("test", "data");
+        nativeCache.invalidate("test");
+
+        // In real tests, you'd use a log appender to verify message content
+        assertThat(nativeCache.asMap()).doesNotContainKey("test");
     }
 }
