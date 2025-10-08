@@ -1,23 +1,17 @@
-git remote -v
+package com.td.esig.api.config;
 
-git checkout --detach
+import java.lang.reflect.Field;
 
-git fetch origin +refs/heads/*:refs/heads/*
+final class TestUtils {
+    private TestUtils() {}
 
-git fetch origin --tags
-
-git remote set-url origin https://github.com/YOUR-ORG-NAME/aesig-common-dal.git
-
-git remote -v
-
-git push --all origin
-
-git push --tags origin
-
-
-9002gaE14ZFAWgti@
-  
-  
-  
-  git config --global user.email "Jaydip.Barvaliya@td.com"
-git config --global user.name "Jaydip Barvaliya"
+    static void injectField(Object target, String fieldName, Object value) {
+        try {
+            Field f = target.getClass().getDeclaredField(fieldName);
+            f.setAccessible(true);
+            f.set(target, value);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to inject field: " + fieldName, e);
+        }
+    }
+}
