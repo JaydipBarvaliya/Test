@@ -1,76 +1,102 @@
-package com.td.esig.api.config;
+package com.td.esig.tokengeneration.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
+import com.td.esig.common.util.*;
+import com.td.esig.model.v1.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.cache.annotation.Cacheable;
 
-import java.util.concurrent.TimeUnit;
-
+import static org.mockito.Mockito.*;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class CaffeineCacheConfigTest {
+class TokenCacheServiceTest {
 
-    private CaffeineCacheConfig config;
+    @Mock
+    private TokenEsIGateway eslGateway;
+
+    @Mock
+    private TokenPropertyCheck mandatePropChecker;
+
+    @InjectMocks
+    private TokenCacheService tokenCacheService;
 
     @BeforeEach
-    void setup() {
-        config = new CaffeineCacheConfig();
-        // make sure the cache actually stores entries (avoid maximumSize(0))
-        TestUtils.injectField(config, "maximumEntriesInCache", 100);
-        TestUtils.injectField(config, "gracePeriodInSeconds", 30);
-    }
-
-    private Cache<Object, Object> tokenCache() {
-        var mgr = config.cacheManager();
-        assertThat(mgr).isNotNull();
-        var springCache = mgr.getCache("token");
-        assertThat(springCache).isNotNull();
-        @SuppressWarnings("unchecked")
-        Cache<Object, Object> nativeCache =
-            (Cache<Object, Object>) springCache.getNativeCache();
-        return nativeCache;
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+        // Set mock decryption key
+        tokenCacheService.decryptionKey = "dummyKey";
     }
 
     @Test
-    void covers_validJson_path() {
-        var cache = tokenCache();
-        long expires = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(60);
-        var resp = ResponseEntity.ok("{\"expiresAt\":" + expires + "}");
-        cache.put("k-valid", resp);          // -> expireAfterCreate (valid JSON, positive TTL, minus grace)
-        cache.getIfPresent("k-valid");       // -> expireAfterRead
+    void testGenerateAccessToken_Success() throws Exception {
+        // given
+        String lobId = "LOB123";
+        String saasUrl = "https://saas.example.com";
+        ResponseEntity<String> dummyResponse = ResponseEntity.ok("{\"token\":\"abc123\"}");
+
+        when(eslGateway.createSessionTokenForSaas(any(), eq(saasUrl), anyString()))
+                .thenReturn(dummyResponse);
+        when(mandatePropChecker.checkMandatoryProp(eq(lobId), anyString(), anyString()))
+                .thenReturn("encryptedData");
+
+        // when
+        ResponseEntity<String> response = tokenCacheService.generateAccessToken(saasUrl, lobId);
+
+        // then
+        assertThat(response).isNotNull();
+        assertThat(response.getBody()).contains("abc123");
+        verify(eslGateway, times(1)).createSessionTokenForSaas(any(), eq(saasUrl), anyString());
     }
 
     @Test
-    void covers_invalidJson_fallback_path() {
-        var cache = tokenCache();
-        cache.put("k-bad-json", ResponseEntity.ok("not-json"));  // -> exception path -> 1s fallback
+    void testGenerateAccessToken_Exception() throws Exception {
+        // given
+        String lobId = "LOB456";
+        String saasUrl = "https://saas.example.com";
+        when(mandatePropChecker.checkMandatoryProp(anyString(), anyString(), anyString()))
+                .thenThrow(new SharedServiceLayerException(new Status(500, "FAIL")));
+
+        // when / then
+        assertThrows(SharedServiceLayerException.class, () ->
+                tokenCacheService.generateAccessToken(saasUrl, lobId));
     }
 
     @Test
-    void covers_nullBody_fallback_path() {
-        var cache = tokenCache();
-        cache.put("k-null", ResponseEntity.<String>ok().build()); // -> body == null -> 1s fallback
+    void testMapAccessTokenRequest_Success() throws Exception {
+        // given
+        String lobId = "LOB789";
+        when(mandatePropChecker.checkMandatoryProp(eq(lobId), anyString(), anyString()))
+                .thenReturn("encrypted");
+        // no exception path
+        AccessTokenRequest request = tokenCacheService.mapAccessTokenRequest(lobId);
+
+        assertThat(request).isNotNull();
+        assertThat(request.getType()).isEqualTo(SaasConstant.OWNER);
     }
 
     @Test
-    void covers_expiredOrNegativeTtl_path() {
-        var cache = tokenCache();
-        // TTL becomes <= 0 after subtracting grace (30s)
-        long shortExpiry = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(20);
-        cache.put("k-expired", ResponseEntity.ok("{\"expiresAt\":" + shortExpiry + "}"));
+    void testMapAccessTokenRequest_Exception() throws Exception {
+        String lobId = "LOB_FAIL";
+        when(mandatePropChecker.checkMandatoryProp(anyString(), anyString(), anyString()))
+                .thenThrow(new SharedServiceLayerException(new Status(500, "Decryption failed")));
+
+        assertThrows(SharedServiceLayerException.class, () ->
+                tokenCacheService.mapAccessTokenRequest(lobId));
     }
 
     @Test
-    void covers_update_and_removalListener() {
-        var cache = tokenCache();
-        long exp1 = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(90);
-        cache.put("k-upd", ResponseEntity.ok("{\"expiresAt\":" + exp1 + "}"));
-
-        long exp2 = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(120);
-        cache.put("k-upd", ResponseEntity.ok("{\"expiresAt\":" + exp2 + "}")); // -> expireAfterUpdate
-
-        cache.invalidate("k-upd");  // -> triggers removalListener
-        assertThat(cache.asMap()).doesNotContainKey("k-upd");
+    void testCacheableAnnotationPresent() throws Exception {
+        // Reflection check just for coverage
+        Cacheable cacheable = TokenCacheService.class
+                .getDeclaredMethod("generateAccessToken", String.class, String.class)
+                .getAnnotation(Cacheable.class);
+        assertThat(cacheable).isNotNull();
+        assertThat(cacheable.value()[0]).isEqualTo("token");
     }
 }
