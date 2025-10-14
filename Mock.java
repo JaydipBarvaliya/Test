@@ -1,7 +1,17 @@
-<rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-    <fileNamePattern>${LOG_PATH}/aesig_api.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-    <maxFileSize>${FILE_SIZE}</maxFileSize>
-    <maxHistory>${MAX_FILE_HISTORY}</maxHistory>
-    <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
-    <cleanHistoryOnStart>true</cleanHistoryOnStart>
-</rollingPolicy>
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.stereotype.Component;
+
+@Component
+public class LogbackTestRunner implements CommandLineRunner {
+    private static final Logger log = LoggerFactory.getLogger(LogbackTestRunner.class);
+
+    @Override
+    public void run(String... args) throws Exception {
+        for (int i = 0; i < 5000; i++) {
+            log.info("Rolling test line number: {}", i);
+            Thread.sleep(10); // optional, just to slow it down
+        }
+    }
+}
