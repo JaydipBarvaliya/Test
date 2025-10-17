@@ -1,1 +1,1 @@
-sudo lsof -nP -iTCP:8082 -sTCP:LISTEN
+sudo netstat -tulnp | grep 8082
