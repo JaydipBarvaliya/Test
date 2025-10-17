@@ -1,1 +1,1 @@
-keytool -list -v -storetype PKCS12 -keystore aesig.notifier.dev.td.com.p12
+git config --global user.email "141364471+taf5028_tdbank@users.noreply.github.com"
