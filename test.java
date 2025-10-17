@@ -1,1 +1,1 @@
-git config --global user.email "141364471+taf5028_tdbank@users.noreply.github.com"
+sudo lsof -nP -iTCP:8082 -sTCP:LISTEN
