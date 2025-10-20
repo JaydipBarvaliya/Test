@@ -1,4 +1,4 @@
-Our API currently supports both text/plain and application/json response types.
+	•	Our API currently supports both text/plain and application/json response types.
 	•	When clients send Accept: application/json, everything works fine.
 	•	If clients send Accept: text/plain, the third-party API rejects it with 406 Not Acceptable since it only supports JSON.
 	•	When no Accept header is sent, Spring defaults to text/plain, but forwards Accept: */* to the third-party API, which still works — that’s why production hasn’t failed.
