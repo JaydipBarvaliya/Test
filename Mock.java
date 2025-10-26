@@ -1,15 +1,30 @@
-@Mapper(componentModel = "spring")
-public interface RejectAttachmentMapper {
+List<RejectAttachment.AttachmentRequirements> updatedAttachments = new ArrayList<>();
 
-    @Mapping(target = "attachmentRequirements", source = "attachmentRequirements")
-    RejectAttachment mapToEsl(RejectAttachmentRequest request);
+List<RejectAttachmentRequestAttachmentRequirementsInner> incomingList =
+        rejectAttachmentRequest.getAttachmentRequirements();
+List<RejectAttachment.AttachmentRequirements> existingList = listOfExistingAttachment;
 
-    @Mapping(target = "comment", source = "commentTxt")
-    @Mapping(target = "status", constant = "REJECTED")
-    @Mapping(target = "id", source = "attachmentId")
-    RejectAttachment.AttachmentRequirements map(AttachmentRequirement source);
+// Build a map for fast lookup by ID
+Map<String, RejectAttachment.AttachmentRequirements> existingById = existingList.stream()
+        .collect(Collectors.toMap(RejectAttachment.AttachmentRequirements::getId, Function.identity()));
 
-    // This line is optional, but helps explicitly show list mapping
-    List<RejectAttachment.AttachmentRequirements> mapAttachmentRequirements(
-        List<AttachmentRequirement> source);
+for (RejectAttachmentRequestAttachmentRequirementsInner incoming : incomingList) {
+    String incomingId = incoming.getAttachmentId();
+    RejectAttachment.AttachmentRequirements existing = existingById.get(incomingId);
+
+    // If not found → throw error
+    if (existing == null) {
+        throw new IllegalArgumentException("Attachment ID not found: " + incomingId);
+    }
+
+    // ✅ Directly replace fields
+    existing.setComment(incoming.getCommentTxt());
+    existing.setStatus(incoming.getStatus());
+
+    // Add updated record
+    updatedAttachments.add(existing);
 }
+
+// Replace the old list with updated one
+listOfExistingAttachment.clear();
+listOfExistingAttachment.addAll(updatedAttachments);
