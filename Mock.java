@@ -1,2 +1,5 @@
--Djavax.net.ssl.trustStore="C:\Program Files\Java\jdk-17\lib\security\cacerts"
--Djavax.net.ssl.trustStorePassword=changeit
+keytool -importcert ^
+ -keystore "C:\opt\springboot\security\cacerts" ^
+ -alias usertrust ^
+ -file "C:\opt\springboot\security\usertrustrsacertificationauthority.cer" ^
+ -storepass changeit -noprompt
