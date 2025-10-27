@@ -1,4 +1,1 @@
-mvn clean verify ^
-  -Djavax.net.ssl.trustStore="C:\opt\springboot\security\truststore.jks" ^
-  -Djavax.net.ssl.trustStorePassword=changeit ^
-  -Djavax.net.ssl.trustStoreType=JKS
+mvn clean compile verify -DreportROI=false -Dcucumber.filter.tags="@Tag" -Djavax.net.ssl.trustStore="src/main/resources/cacerts"
