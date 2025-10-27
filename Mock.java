@@ -1,1 +1,4 @@
-openssl s_client -showcerts -connect repo.td.com:443 </dev/null 2>/dev/null|openssl x509 -outform PEM > td-root-cert.pem
+mvn clean verify ^
+  -Djavax.net.ssl.trustStore="C:\opt\springboot\security\truststore.jks" ^
+  -Djavax.net.ssl.trustStorePassword=changeit ^
+  -Djavax.net.ssl.trustStoreType=JKS
