@@ -1,1 +1,1 @@
-mvn clean compile verify -DreportROI=false -Dcucumber.filter.tags="@Tag" -Djavax.net.ssl.trustStore="src/main/resources/cacerts"
+mvn clean compile verify -DreportROI=false -Dcucumber.filter.tags="@Tag" "-Djavax.net.ssl.trustStore=C:\\opt\\springboot\\security\\cacerts"
