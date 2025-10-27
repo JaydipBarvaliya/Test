@@ -1,1 +1,4 @@
-mvn clean compile verify -DreportROI=false -Dcucumber.filter.tags="@Tag" "-Djavax.net.ssl.trustStore=C:\\opt\\springboot\\security\\cacerts"
+keytool -importcert -keystore "C:\opt\springboot\security\cacerts" ^
+-alias TRMIS ^
+-file "C:\Users\taf5028\Documents\TD_Bank_Group_Internal_Browsing.cer" ^
+-storepass changeit -noprompt
