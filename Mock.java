@@ -1,3 +1,15 @@
-ALTER TABLE ESIGN_API_DEV.CONFIGURATION
-ADD CONSTRAINT CONFIG_UNIQUE_APP_LOB_PROP
-UNIQUE (APP_ID, LOB_ID, PROP_NAME);
+<build>
+  <plugins>
+    <!-- Code Style -->
+    <plugin>…maven-checkstyle-plugin…</plugin>
+
+    <!-- Bug & Smell Detection -->
+    <plugin>…maven-pmd-plugin…</plugin>
+
+    <!-- Format & Imports -->
+    <plugin>…spotless-maven-plugin…</plugin>
+
+    <!-- Static Analysis -->
+    <plugin>…spotbugs-maven-plugin…</plugin>
+  </plugins>
+</build>
