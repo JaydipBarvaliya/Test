@@ -1,1 +1,4 @@
-mvn clean verify -Djavax.net.ssl.trustStore="C:\opt\springboot\security\cacerts" -Djavax.net.ssl.trustStorePassword=changeit
+// NOPMD EmptyControlStatement: Waiting for all threads to complete before proceeding
+while (!pool.isTerminated()) {
+    // intentionally empty
+}
