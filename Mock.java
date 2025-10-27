@@ -1,1 +1,1 @@
-keytool -list -keystore "C:\opt\springboot\security\cacerts" -storepass changeit | find "usertrust"
+mvn clean verify -Djavax.net.ssl.trustStore="C:\opt\springboot\security\cacerts" -Djavax.net.ssl.trustStorePassword=changeit
