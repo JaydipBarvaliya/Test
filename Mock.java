@@ -1,8 +1,1 @@
-Dear patient!
-
-GNMI Medical Imaging would like you to complete these forms. Please follow the link below:
-
-https://forms.nexhealth.com/app/s/iGURXcrVS6
-
-Sincerely,
-The team at GNMI Medical Imaging
+HIRALBEN, CT is scheduled for Oct 31, 2025 arrive at 02:10 AM (open 24hrs) at GNMI - 10 KINGSBRIDGE GARDEN CIRCLE, MISSISSAUGA. No show fee or cancel < 24hrs = $75. Prep: https://www.gnmi.ca/services. Text 289-274-0463 for questions.
