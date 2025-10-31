@@ -1,1 +1,9 @@
-HIRALBEN, CT is scheduled for Oct 31, 2025 arrive at 02:10 AM (open 24hrs) at GNMI - 10 KINGSBRIDGE GARDEN CIRCLE, MISSISSAUGA. No show fee or cancel < 24hrs = $75. Prep: https://www.gnmi.ca/services. Text 289-274-0463 for questions.
+Hi Garrett,
+
+Oh, I see.
+
+I thought that email was related to the GitHub vulnerability feature I was testing, which is why I interacted with it. I understand now that it was part of the phishing simulation.
+
+No worries — I’ll make sure to be more cautious going forward and will report any suspicious emails immediately.
+
+Thanks for letting me know.
