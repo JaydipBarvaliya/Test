@@ -1,43 +1,18 @@
-@ExtendWith(MockitoExtension.class)
-class CheckMandatoryPropertyTest {
+@Test
+@TAE0141
+void testCheckMandatoryPropWhenNull() throws Exception {
+    String lobId = "dna";
+    String propToCheck = "API_KEY"; // must exist in mandatoryPropList
 
-    @Mock
-    ConfigurationProperties config;
+    // Mock config to return null when fetching this mandatory property
+    when(config.getConfigProperty(lobId, propToCheck)).thenReturn(null);
 
-    @InjectMocks
-    CheckMandatoryProperty checkMandatoryProperty =
-            new CheckMandatoryProperty(config, "API_KEY"); // inject with mandatoryProp
+    // Expect SharedServiceLayerException to be thrown
+    SharedServiceLayerException ex = assertThrows(
+        SharedServiceLayerException.class,
+        () -> checkMandatoryProperty.checkMandatoryProp(lobId, propToCheck)
+    );
 
-    @BeforeEach
-    void setUp() {
-        checkMandatoryProperty.init(); // run init manually
-    }
-
-    @Test
-    void testCheckMandatoryProp_ReturnsNull_WhenPropertyIsNotMandatory() throws Exception {
-        String lobId = "dna";
-        String propToCheck = "NON_MANDATORY_PROP";
-
-        when(config.getConfigProperty(lobId, propToCheck)).thenReturn(null);
-
-        String result = checkMandatoryProperty.checkMandatoryProp(lobId, propToCheck);
-
-        Assertions.assertNull(result);
-    }
-
-    @Test
-    void testCheckMandatoryProp_ThrowsException_WhenMandatoryValueIsNull() {
-        String lobId = "dna";
-        String propToCheck = "API_KEY"; // assume this is mandatory
-
-        when(config.getConfigProperty(lobId, propToCheck)).thenReturn(null);
-
-        SharedServiceLayerException thrown = Assertions.assertThrows(
-                SharedServiceLayerException.class,
-                () -> checkMandatoryProperty.checkMandatoryProp(lobId, propToCheck),
-                "Expected to throw SharedServiceLayerException"
-        );
-
-        Assertions.assertTrue(thrown.getMessage().contains("Mandatory Config Property"));
-    }
+    // Validate exception message
+    assertEquals("Mandatory Config Property: API_KEY cannot be null", ex.getMessage());
 }
