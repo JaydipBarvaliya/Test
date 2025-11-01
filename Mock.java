@@ -1,49 +1,79 @@
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.springframework.test.util.ReflectionTestUtils;
+package com.td.esig.api.util;
 
-import static org.mockito.Mockito.*;
-import static org.junit.jupiter.api.Assertions.*;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
-class CheckMandatoryPropertyTest {
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-    @Mock
-    ConfigurationProperties config;
+@Slf4j
+@Component
+@Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
+public class CheckMandatoryProperty {
 
-    @InjectMocks
-    CheckMandatoryProperty checkMandatoryProperty;
+    private final ConfigurationProperties config;
 
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-        // Ensure the private field `mandateProp` is initialized BEFORE init()
-        ReflectionTestUtils.setField(checkMandatoryProperty, "mandateProp", "API_KEY,AUTH_TOKEN,CLIENT_ID");
-        checkMandatoryProperty.init(); // Call init after setting mandateProp
+    @Value("${configuration.property.mandatory:}")
+    private String mandateProp;
+
+    private List<String> mandatoryPropList = Collections.emptyList();
+
+    public CheckMandatoryProperty(ConfigurationProperties config) {
+        this.config = config;
     }
 
-    @Test
-    void testCheckMandatoryProp() throws Exception {
-        String lobId = "dna";
-        String propToCheck = "API_KEY";
-
-        // Optional mock setup (depends on your ConfigurationProperties logic)
-        when(config.getConfigProperty(lobId, propToCheck)).thenReturn(null);
-
-        String result = checkMandatoryProperty.checkMandatoryProp(lobId, propToCheck);
-        assertNull(result); // assert logic based on your expected result
+    @PostConstruct
+    public void init() {
+        if (StringUtils.hasText(mandateProp)) {
+            mandatoryPropList = Stream.of(mandateProp.split(":"))
+                                      .map(String::trim)
+                                      .filter(s -> !s.isEmpty())
+                                      .collect(Collectors.toList());
+        } else {
+            log.warn("No mandatory properties defined under 'configuration.property.mandatory'");
+        }
+        log.debug("Initialized mandatory property list: {}", mandatoryPropList);
     }
 
-    @Test
-    void testCheckMandatoryPropWhenNull() throws Exception {
-        String lobId = "dna";
-        String propToCheck = "NON_EXISTING_PROP";
+    /**
+     * Checks a mandatory property.
+     *
+     * @param lob the LOB value
+     * @param propToCheck property name to check
+     * @return property value if valid
+     * @throws SharedServiceLayerException if the value is null
+     */
+    public String checkMandatoryProp(String lob, String propToCheck) throws SharedServiceLayerException {
+        String propValue = config.getConfigProperty(lob, propToCheck);
 
-        when(config.getConfigProperty(lobId, propToCheck)).thenReturn(null);
+        if (isMandatory(propToCheck) && !StringUtils.hasText(propValue)) {
+            String msg = String.format("Mandatory Config Property '%s' cannot be NULL for LOB: %s", propToCheck, lob);
+            log.error(msg);
+            throw new SharedServiceLayerException(new Status("500", Severity.Error), msg);
+        }
 
-        String result = checkMandatoryProperty.checkMandatoryProp(lobId, propToCheck);
-        assertNull(result);
+        return propValue;
+    }
+
+    /**
+     * Checks if a property is mandatory.
+     *
+     * @param propertyToCheck property name
+     * @return true if mandatory, false otherwise
+     */
+    boolean isMandatory(String propertyToCheck) {
+        boolean result = mandatoryPropList.contains(propertyToCheck);
+        if (result) {
+            log.debug("'{}' is a mandatory property", propertyToCheck);
+        }
+        return result;
     }
 }
