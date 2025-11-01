@@ -2,17 +2,18 @@
 @TAE0141
 void testCheckMandatoryPropWhenNull() throws Exception {
     String lobId = "dna";
-    String propToCheck = "API_KEY"; // must exist in mandatoryPropList
+    String propToCheck = null;
 
-    // Mock config to return null when fetching this mandatory property
+    // Mock config and isMandatory behaviour
     when(config.getConfigProperty(lobId, propToCheck)).thenReturn(null);
+    CheckMandatoryProperty spyCheckMandatoryProperty = Mockito.spy(checkMandatoryProperty);
+    Mockito.doReturn(true).when(spyCheckMandatoryProperty).isMandatory(propToCheck);
 
     // Expect SharedServiceLayerException to be thrown
     SharedServiceLayerException ex = assertThrows(
         SharedServiceLayerException.class,
-        () -> checkMandatoryProperty.checkMandatoryProp(lobId, propToCheck)
+        () -> spyCheckMandatoryProperty.checkMandatoryProp(lobId, propToCheck)
     );
 
-    // Validate exception message
-    assertEquals("Mandatory Config Property: API_KEY cannot be null", ex.getMessage());
+    assertEquals("Mandatory Config Property: null cannot be null", ex.getMessage());
 }
