@@ -1,21 +1,43 @@
-@PostConstruct
-public void init() {
-    mandatoryPropList = List.of(mandateProp.split(":"));
-}
+@ExtendWith(MockitoExtension.class)
+class CheckMandatoryPropertyTest {
 
-public String checkMandatoryProp(String lob, String propToCheck)
-        throws SharedServiceLayerException {
-    String propValue = config.getConfigProperty(lob, propToCheck);
+    @Mock
+    ConfigurationProperties config;
 
-    if (isMandatory(propToCheck) && null == propValue) {
-        throw new SharedServiceLayerException(
-                new Status("500", Severity.Error),
-                "Mandatory Config Property: " + propToCheck + " cannot be NULL for LOB: " + lob);
+    @InjectMocks
+    CheckMandatoryProperty checkMandatoryProperty =
+            new CheckMandatoryProperty(config, "API_KEY"); // inject with mandatoryProp
+
+    @BeforeEach
+    void setUp() {
+        checkMandatoryProperty.init(); // run init manually
     }
 
-    return propValue;
-}
+    @Test
+    void testCheckMandatoryProp_ReturnsNull_WhenPropertyIsNotMandatory() throws Exception {
+        String lobId = "dna";
+        String propToCheck = "NON_MANDATORY_PROP";
 
-boolean isMandatory(String propertyToCheck) {
-    return !mandatoryPropList.isEmpty() && mandatoryPropList.contains(propertyToCheck);
+        when(config.getConfigProperty(lobId, propToCheck)).thenReturn(null);
+
+        String result = checkMandatoryProperty.checkMandatoryProp(lobId, propToCheck);
+
+        Assertions.assertNull(result);
+    }
+
+    @Test
+    void testCheckMandatoryProp_ThrowsException_WhenMandatoryValueIsNull() {
+        String lobId = "dna";
+        String propToCheck = "API_KEY"; // assume this is mandatory
+
+        when(config.getConfigProperty(lobId, propToCheck)).thenReturn(null);
+
+        SharedServiceLayerException thrown = Assertions.assertThrows(
+                SharedServiceLayerException.class,
+                () -> checkMandatoryProperty.checkMandatoryProp(lobId, propToCheck),
+                "Expected to throw SharedServiceLayerException"
+        );
+
+        Assertions.assertTrue(thrown.getMessage().contains("Mandatory Config Property"));
+    }
 }
