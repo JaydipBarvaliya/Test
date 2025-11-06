@@ -1,2 +1,12 @@
-log.error("Duplicate configuration detected for APP_ID={}, LOB_ID={}, PROP_NAME={}. Violation of unique constraint CONSTRAINT_OF__APP_ID__LOB_ID__PROP_NAME", 
-    appId, lobId, propName);
+SELECT c.ID,
+       c.CLIENT_ID,
+       c.LOB_ID
+FROM ESIGN_API_DEV.CLIENT_APP_CONFIGURATION c
+WHERE EXISTS (
+    SELECT 1
+    FROM ESIGN_API_DEV.CLIENT_APP_CONFIGURATION d
+    WHERE d.CLIENT_ID = c.CLIENT_ID
+      AND d.LOB_ID = c.LOB_ID
+      AND d.ROWID <> c.ROWID
+)
+ORDER BY c.CLIENT_ID, c.LOB_ID, c.ID;
