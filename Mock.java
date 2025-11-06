@@ -1,3 +1,2 @@
-ALTER TABLE CLIENT_APP_CONFIGURATION 
-RENAME CONSTRAINT "CONFIG UNIQUE CLIENT LOB" 
-TO CONFIG_UNIQUE_CLIENT_LOB;
+log.error("Duplicate configuration detected for APP_ID={}, LOB_ID={}, PROP_NAME={}. Violation of unique constraint CONSTRAINT_OF__APP_ID__LOB_ID__PROP_NAME", 
+    appId, lobId, propName);
