@@ -1,126 +1,324 @@
-Perfect ✅ — this is exactly how to handle such changes professionally.
-Here’s a ready-to-paste Confluence/Design-Doc draft for your lead and consumer teams.
-It captures current behavior, all Accept header scenarios, impact after removal, and action items.
+Perfect ✅ — that’s actually the best structure for Confluence: one page per endpoint, cleanly separated and easy to link from a master summary page.
+
+Below are four standalone Confluence-ready documents, each one fully detailed, consistent in structure, and ready to paste as its own page.
+(Each includes: purpose, current behavior, proposed change, impact matrix, consumer actions, and rollout plan.)
 
 ⸻
 
-📘 AESIG API – Response Media Type Review (Apply Signature Endpoint)
-
-🔹 Endpoint Details
-
-Endpoint:
-POST /esignatureevents/{eventId}/parties/{partyId}/signs
-
-Consumes:
-application/json
-
-Current Produces:
-binary/octet-stream, application/json
-
-Proposed Change:
-Remove binary/octet-stream from produces so that the endpoint only produces JSON.
+🧾 1️⃣ AESIG – Update Transaction Endpoint (PATCH /esignatureevents/{eventId})
 
 ⸻
 
-🧩 Current Behavior Overview
+🔹 Purpose
 
-The AESIG “Apply Signature” endpoint currently supports both binary/octet-stream and application/json response types.
-However, the AESIG service does not return any binary data to clients — the body is empty (Content-Length: 0) with only 200 OK status.
-
-Also, the downstream integration with OneSpan only accepts application/json, and AESIG already enforces this internally:
-
-httpHeaders.setAccept(List.of(MediaType.APPLICATION_JSON));
-
-Therefore, binary/octet-stream support at the AESIG layer is redundant.
+To standardize the response type for the Update Transaction API.
+Currently, the endpoint supports both text/plain and application/json, though no actual text response is returned.
 
 ⸻
 
-⚙️ Behavior Matrix – Before and After Change
+⚙️ Endpoint Details
 
-Scenario	Client Request Header (Accept)	Current Behavior	Response Example	After Removing binary/octet-stream	Impact to Client
-1️⃣ Client sends Accept: application/json	Matches produces list	✅ 200 OK, Content-Type: application/json	(Empty body)	✅ No change	None
-2️⃣ Client sends Accept: binary/octet-stream	Matches produces list	✅ 200 OK, Content-Type: binary/octet-stream	(Empty body)	❌ 406 Not Acceptable	⚠️ Client must stop using this header
-3️⃣ Client sends no Accept header	Treated as Accept: */*	Defaults to first produces value → binary/octet-stream	(Empty body)	Defaults to only produces type → application/json	✅ No functional impact (status 200 OK still)
-4️⃣ Client sends unsupported Accept type (e.g., text/plain)	No match	❌ 406 Not Acceptable	—	❌ 406 Not Acceptable	None (already invalid)
-5️⃣ AESIG → OneSpan internal request	Always forces Accept: application/json	✅ Accepted by OneSpan	JSON-only	✅ No change	None
+Property	Value
+HTTP Method	PATCH
+Path	/esignatureevents/{eventId}
+Consumes	application/json
+Current Produces	text/plain, application/json
+Proposed Produces	application/json
 
 
 ⸻
 
-🧠 Root Cause / Reason for Change
-	•	AESIG never returns binary data from this endpoint.
-	•	OneSpan only supports application/json.
-	•	Keeping binary/octet-stream is unnecessary and may cause confusion or inconsistent content negotiation when clients omit the Accept header.
+🧩 Current Behavior
+	•	If no Accept header → defaults to text/plain.
+	•	If Accept: application/json → returns JSON.
+	•	Response body is empty; only 200 OK.
 
 ⸻
 
-🧾 Example Response Snapshots
+🔁 Proposed Change
 
-Postman Example – Current Behavior
+Remove text/plain from produces, keeping only application/json.
 
-Case	Request	Response
-No Accept header	200 OK, Content-Type: binary/octet-stream	Content-Length: 0
-Accept: application/json	200 OK, Content-Type: application/json	Content-Length: 0
-Accept: binary/octet-stream	200 OK, Content-Type: binary/octet-stream	Content-Length: 0
+⸻
 
-After Change
+📊 Behavior Comparison
 
-Case	Request	Response
-No Accept header	200 OK, Content-Type: application/json	Content-Length: 0
-Accept: application/json	200 OK, Content-Type: application/json	Content-Length: 0
-Accept: binary/octet-stream	❌ 406 Not Acceptable	—
+Scenario	Current Behavior	After Change	Impact
+Accept: application/json	✅ 200 OK	✅ 200 OK	None
+Accept: text/plain	✅ 200 OK	❌ 406 Not Acceptable	Must use JSON
+No Accept header	Defaults to text/plain	Defaults to application/json	Verify consumer parsing logic
 
 
 ⸻
 
-🔍 Consumer Impact Summary
-
-Impact Type	Description	Action Required
-✅ Existing JSON clients	Already using Accept: application/json	No action required
-⚠️ Non-JSON or no Accept header clients	Will now receive Content-Type: application/json	Verify client code doesn’t rely on raw/binary response parsing
-❌ Clients using Accept: binary/octet-stream	Will receive HTTP 406	Must update header to Accept: application/json
-
+🧠 Rationale
+	•	AESIG does not return any plain text body.
+	•	JSON is the standard for API responses.
+	•	Removes ambiguity for clients parsing empty text.
 
 ⸻
 
-✅ Recommendation
-	•	Proceed with removing "binary/octet-stream" from the produces list.
-	•	Monitor gateway logs to confirm no existing consumer is sending Accept: binary/octet-stream.
-	•	Communicate to consumers:
-	•	Use Accept: application/json for all AESIG API calls.
-	•	Validate that they can handle JSON content type (even with empty bodies).
+✅ Consumer Action
+	•	Ensure requests send Accept: application/json or omit the header.
+	•	Stop sending text/plain.
 
 ⸻
 
 🗓️ Rollout Plan
 
-Phase	Action	Timeline
-1	Validate existing consumer Accept usage in API Gateway logs	Week 1
-2	Update endpoint and deploy to DEV/UAT	Week 2
-3	Notify consumers to validate	Week 3
-4	Remove binary/octet-stream from PROD after sign-off	Week 4
+Step	Action
+1	Validate logs for clients using text/plain
+2	Update to JSON-only in DEV/UAT
+3	Notify consumers
+4	Deploy to PROD after validation
 
 
 ⸻
 
-📨 Sample Consumer Notification Email
+⸻
 
-Subject: AESIG API Update – Removal of binary/octet-stream Response Type
-
-Dear Consumer Team,
-
-We are planning to remove the binary/octet-stream response type from the Apply Signature API endpoint (POST /esignatureevents/{eventId}/parties/{partyId}/signs).
-
-Going forward, only application/json responses will be supported. Clients currently sending Accept: application/json or no Accept header will not be impacted.
-
-Clients sending Accept: binary/octet-stream will start receiving HTTP 406 – Not Acceptable.
-
-Please ensure your integrations are updated to send Accept: application/json.
-
-If you have questions or need assistance validating this change, contact the AESIG API team.
-
-AESIG API Team – TD Bank
+🧾 2️⃣ AESIG – Delete Transaction Endpoint (DELETE /esignatureevents/{eventId})
 
 ⸻
 
-Would you like me to generate this in a Confluence markdown/table-compatible format (so it pastes cleanly with proper table borders and headers), or keep it as this clean markdown layout?
+🔹 Purpose
+
+To align Delete Transaction response type with JSON-only convention and remove redundant text/plain.
+
+⸻
+
+⚙️ Endpoint Details
+
+Property	Value
+HTTP Method	DELETE
+Path	/esignatureevents/{eventId}
+Consumes	—
+Current Produces	text/plain, application/json
+Proposed Produces	application/json
+
+
+⸻
+
+🧩 Current Behavior
+	•	No Accept header → defaults to text/plain.
+	•	Accept: application/json → returns JSON (empty body).
+
+⸻
+
+🔁 Proposed Change
+
+Keep only application/json.
+
+⸻
+
+📊 Behavior Comparison
+
+Scenario	Current Behavior	After Change	Impact
+Accept: application/json	✅ 200 OK	✅ 200 OK	None
+Accept: text/plain	✅ 200 OK	❌ 406 Not Acceptable	Must switch to JSON
+No Accept header	Defaults to text/plain	Defaults to application/json	Minimal impact
+
+
+⸻
+
+🧠 Rationale
+	•	Endpoint does not produce any plain text content.
+	•	Aligns with REST standards and AESIG’s JSON standardization.
+
+⸻
+
+✅ Consumer Action
+	•	Stop using text/plain.
+	•	Prefer Accept: application/json (or omit header).
+
+⸻
+
+🗓️ Rollout Plan
+
+Step	Action
+1	Review logs for consumers using text/plain
+2	Apply fix in DEV/UAT
+3	Notify consumers for validation
+4	Deploy to PROD post sign-off
+
+
+⸻
+
+⸻
+
+🧾 3️⃣ AESIG – Apply Signature Endpoint (POST /esignatureevents/{eventId}/parties/{partyId}/signs)
+
+⸻
+
+🔹 Purpose
+
+To remove the unused binary response type and standardize the endpoint’s response to JSON.
+
+⸻
+
+⚙️ Endpoint Details
+
+Property	Value
+HTTP Method	POST
+Path	/esignatureevents/{eventId}/parties/{partyId}/signs
+Consumes	application/json
+Current Produces	binary/octet-stream, application/json
+Proposed Produces	application/json
+
+
+⸻
+
+🧩 Current Behavior
+	•	AESIG does not return any binary data; only 200 OK.
+	•	Internally, AESIG → OneSpan calls always use Accept: application/json.
+
+⸻
+
+🔁 Proposed Change
+
+Remove binary/octet-stream from produces.
+
+⸻
+
+📊 Behavior Comparison
+
+Scenario	Current Behavior	After Change	Impact
+Accept: application/json	✅ 200 OK	✅ 200 OK	None
+Accept: binary/octet-stream	✅ 200 OK	❌ 406 Not Acceptable	Must use JSON
+No Accept header	Defaults to binary/octet-stream	Defaults to application/json	Minimal impact
+
+
+⸻
+
+🧠 Rationale
+	•	No binary payload is returned.
+	•	OneSpan accepts JSON only.
+	•	Standardizes behavior and simplifies integration.
+
+⸻
+
+✅ Consumer Action
+	•	Use Accept: application/json.
+	•	Do not rely on binary/octet-stream.
+
+⸻
+
+🗓️ Rollout Plan
+
+Step	Action
+1	Check logs for consumers using binary/octet-stream
+2	Implement change in DEV/UAT
+3	Notify consumers
+4	Deploy to PROD after validation
+
+
+⸻
+
+⸻
+
+🧾 4️⃣ AESIG – Get Document Endpoint (GET /esignatureevents/{eventId}/documentpackage/{documentId})
+
+⸻
+
+🔹 Purpose
+
+To remove redundant binary/octet-stream support and align file download responses with the proper MIME type application/pdf.
+
+⸻
+
+⚙️ Endpoint Details
+
+Property	Value
+HTTP Method	GET
+Path	/esignatureevents/{eventId}/documentpackage/{documentId}
+Consumes	—
+Current Produces	binary/octet-stream, application/pdf, application/json
+Proposed Produces	application/pdf, application/json
+
+
+⸻
+
+🧩 Current Behavior
+	•	No Accept header → defaults to binary/octet-stream.
+	•	Accept: binary/octet-stream → returns PDF file as generic binary stream.
+	•	Accept: application/pdf → returns same file but with correct PDF MIME.
+	•	Accept: application/json → returns metadata or stats as JSON.
+
+⸻
+
+🔁 Proposed Change
+
+Remove binary/octet-stream from produces.
+Keep only application/pdf (for files) and application/json (for metadata).
+
+⸻
+
+📊 Behavior Comparison
+
+Scenario	Current Behavior	After Change	Impact
+Accept: application/pdf	✅ Returns file (Content-Type: application/pdf)	✅ Same	None
+Accept: application/json	✅ Returns metadata JSON	✅ Same	None
+Accept: binary/octet-stream	✅ Returns file (generic MIME)	❌ 406 Not Acceptable	Must switch to PDF or remove header
+No Accept header	Defaults to binary/octet-stream	Defaults to application/pdf	✅ File still downloads, MIME is more accurate
+
+
+⸻
+
+🧠 Rationale
+	•	application/pdf is the correct and explicit MIME type for PDFs.
+	•	binary/octet-stream is generic and redundant.
+	•	Consumers that don’t send Accept will continue to work (fallback = first produces type).
+	•	This change improves browser compatibility, MIME clarity, and REST compliance.
+
+⸻
+
+✅ Consumer Action
+	•	If sending Accept: binary/octet-stream, either:
+	•	Change to Accept: application/pdf, or
+	•	Remove Accept header (API will default to application/pdf).
+	•	No change needed for JSON metadata consumers.
+
+⸻
+
+📥 Example Before vs After
+
+Case	Before	After
+Header	Accept: binary/octet-stream	Accept: application/pdf
+Response	200 OK, Content-Type: binary/octet-stream	200 OK, Content-Type: application/pdf
+File	Same PDF content	Same PDF content
+Browser Behavior	Prompts generic download	Opens PDF viewer inline
+
+
+⸻
+
+🗓️ Rollout Plan
+
+Step	Action
+1	Identify consumers sending binary/octet-stream
+2	Notify them of deprecation
+3	Apply change to DEV/UAT
+4	Deploy to PROD after validation
+
+
+⸻
+
+🧭 Summary
+
+Impacted Consumers	Resolution
+Sending Accept: binary/octet-stream	Update to application/pdf or omit header
+Sending Accept: application/pdf	No change
+Sending Accept: application/json	No change
+Sending no Accept	Still works (defaults to PDF)
+
+
+⸻
+
+✅ End Result:
+	•	Standardized media types across AESIG endpoints
+	•	Consistent JSON or PDF responses
+	•	Predictable defaults and improved interoperability
+
+⸻
+
+Would you like me to also generate a “master index page” for Confluence that summarizes and links to all four of these pages (with short one-line summaries and impact tags)?
+That’s often what leads/managers prefer at the top level.
