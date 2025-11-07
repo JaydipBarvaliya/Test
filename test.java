@@ -1,148 +1,87 @@
-Excellent — this is the right endpoint to close the full chain.
-Below is your Confluence-ready design page for the “Get Document” endpoint, formatted exactly like your previous three pages but with extra depth to capture the complexity of its behavior (three produces types and binary vs. PDF vs. JSON content differences).
+Perfect ✅ — let’s make this email both clear and professional, aligned with how TD’s internal API teams usually communicate such updates to external or partner consumers.
+
+Below is a ready-to-send draft email you can paste into Outlook or Confluence announcement templates.
+It keeps a balanced tone: informative, low-risk, and includes a technical example + action guidance.
 
 ⸻
 
-🟦 AESIG API – Response Media Type Review (Get Document Endpoint)
+Subject: AESIG API Update – Standardization of Response Media Types (Action Required)
 
 ⸻
 
-🔹 Endpoint Details
+Dear Consumer Team,
 
-Property	Value
-Endpoint	GET /esignatureevents/{eventId}/documentpackage/{documentId}
-Consumes	application/json
-Current Produces	binary/octet-stream, application/pdf, application/json
-Proposed Produces	application/pdf, application/json
+We’re reaching out to inform you about an upcoming change in the AESIG API response configuration as part of our ongoing standardization and alignment with TD’s API governance practices.
 
+What’s Changing
 
-⸻
+Starting with the next release, we are removing support for text/plain and binary/octet-stream response types across AESIG APIs.
+Only descriptive and REST-compliant response types (application/json and, where applicable, application/pdf) will be supported going forward.
 
-⚙️ Current Behavior Overview
+This update applies to the following endpoints:
 
-The Get Document endpoint retrieves an individual document from an eSignature event.
-It currently declares three produces types — binary/octet-stream, application/pdf, and application/json.
-However, AESIG does not explicitly set an Accept header in code. The media type negotiation is purely handled by Spring MVC content negotiation rules.
-
-Here’s the current observed behavior:
-	1.	No Accept header:
-Spring selects the first entry (binary/octet-stream) from the produces list.
-The document is returned as a binary response, visible as encoded bytes when viewed in raw mode.
-	2.	Accept: binary/octet-stream:
-AESIG returns binary bytes (PDF file stream) — typically consumed as file download.
-	3.	Accept: application/pdf:
-AESIG returns the document as a valid PDF file (browser-friendly).
-	4.	Accept: application/json:
-AESIG returns metadata or an encoded structure of the same document in JSON form.
-	5.	The content (binary vs JSON) slightly differs due to encoding — the raw stream and the base64/structured JSON payload differ in size and encoding format.
-
-Because the AESIG endpoint already produces valid PDFs (Content-Disposition: attachment; filename=...),
-the binary/octet-stream support is redundant and less descriptive than application/pdf.
-
-⸻
-
-📊 Behavior Matrix – Before and After Change
-
-Scenario	Current Behavior	Response Example	After Removing binary/octet-stream	Impact
-Accept: application/pdf	✅ 200 OK	Content-Type: application/pdf	✅ 200 OK	None
-Accept: application/json	✅ 200 OK	Content-Type: application/json	✅ 200 OK	None
-Accept: binary/octet-stream	✅ 200 OK	Content-Type: binary/octet-stream	❌ 406 Not Acceptable	Must update to application/pdf
-No Accept header	Defaults to binary/octet-stream	Content-Type: binary/octet-stream	Defaults to application/pdf	Validate client-side file handling logic
-Accept: */*	✅ 200 OK	Defaults to binary stream	✅ 200 OK	Will default to application/pdf after change
+Endpoint	Current Produces	New Produces
+PATCH /esignatureevents/{eventId}	text/plain, application/json	application/json
+DELETE /esignatureevents/{eventId}	text/plain, application/json	application/json
+POST /esignatureevents/{eventId}/parties/{partyId}/signs	binary/octet-stream, application/json	application/json
+GET /esignatureevents/{eventId}/documentpackage/{documentId}	binary/octet-stream, application/pdf, application/json	application/pdf, application/json
 
 
 ⸻
 
-💡 Root Cause / Reason for Change
-	•	AESIG correctly generates and serves documents in PDF format, not raw binary.
-	•	The binary/octet-stream header is too generic and does not accurately represent the response.
-	•	Keeping it leads to inconsistent behavior when clients omit Accept.
-	•	Removing it improves clarity, browser compatibility, and downstream integration reliability.
+Impact to Consumers
+	•	✅ If you already send Accept: application/json (or application/pdf for document download), no action is required.
+	•	⚠️ If your integration currently uses Accept: text/plain or Accept: binary/octet-stream, you may start receiving HTTP 406 – Not Acceptable responses.
+	•	⚙️ If no Accept header is specified, responses will now default to application/json (or application/pdf for document retrieval).
 
 ⸻
 
-📦 Example Response Snapshots
+Example Behavior Change
 
---- Before Change ---
-Request: GET /esignatureevents/{eventId}/documentpackage/{documentId}
-Accept: (not provided)
-Response: 200 OK
-Content-Type: binary/octet-stream
-Content-Disposition: attachment; filename=1.pdf
-Content-Length: 335819
-
-Request: GET /esignatureevents/{eventId}/documentpackage/{documentId}
-Accept: binary/octet-stream
-Response: 200 OK
-Content-Type: binary/octet-stream
-Body: Encoded binary stream (raw PDF bytes)
-
-Request: GET /esignatureevents/{eventId}/documentpackage/{documentId}
-Accept: application/pdf
-Response: 200 OK
-Content-Type: application/pdf
-Body: PDF file content rendered in browser
-
-Request: GET /esignatureevents/{eventId}/documentpackage/{documentId}
-Accept: application/json
-Response: 200 OK
-Content-Type: application/json
-Body: JSON metadata (document structure or encoded representation)
-
---- After Change ---
-Request: GET /esignatureevents/{eventId}/documentpackage/{documentId}
-Accept: (not provided)
-Response: 200 OK
-Content-Type: application/pdf
-Content-Disposition: attachment; filename=1.pdf
-
-Request: GET /esignatureevents/{eventId}/documentpackage/{documentId}
-Accept: binary/octet-stream
-Response: 406 Not Acceptable
-
-Request: GET /esignatureevents/{eventId}/documentpackage/{documentId}
-Accept: application/pdf
-Response: 200 OK
-Content-Type: application/pdf
+Scenario	Current Behavior	After Change
+Accept: application/json	200 OK – JSON	200 OK – JSON ✅
+Accept: text/plain	200 OK – Empty body	406 Not Acceptable ❌
+Accept: binary/octet-stream	200 OK – Empty body	406 Not Acceptable ❌
+No Accept header	200 OK – May default to text/plain	200 OK – Defaults to JSON ✅
 
 
 ⸻
 
-🧠 Consumer Impact Summary
-
-Consumer Type	Description	Action Required
-✅ PDF Consumers	Already using Accept: application/pdf	No change
-✅ JSON Consumers	Using Accept: application/json	No change
-⚠ No Accept Header Consumers	Will now receive PDF (application/pdf) instead of binary stream	Validate file parsing or download handling
-❌ Binary Consumers	Using Accept: binary/octet-stream	Must update header to application/pdf
-
-
-⸻
-
-✅ Recommendation
-	•	Remove binary/octet-stream from the produces list.
-	•	Keep application/pdf and application/json for structured and file-based retrieval.
-	•	Communicate to any downstream consumers using binary accept headers to migrate to PDF.
-	•	Test through Postman to confirm PDF renders successfully under application/pdf.
+Action Required
+	•	Review your integration configurations for these endpoints.
+	•	Ensure that Accept headers are updated to:
+	•	application/json for all non-document API calls.
+	•	application/pdf for the Get Document endpoint.
+	•	Test your requests in lower environments (DEV/UAT) once the change is available.
+	•	Validate response parsing logic for empty or JSON payloads.
 
 ⸻
 
-🚀 Rollout Plan
+Rollout Timeline
 
 Phase	Action	Timeline
-1️⃣	Review API Gateway logs for Accept: binary/octet-stream usage	Week 1
-2️⃣	Deploy change to DEV/UAT and test with PDF rendering	Week 2
-3️⃣	Notify consumers and share validation guide	Week 3
-4️⃣	Promote to PROD after UAT validation and sign-off	Week 4
+Week 1	Review API Gateway logs and identify impacted consumers	✔️ Completed / In Progress
+Week 2	Deploy updated endpoints to DEV/UAT	Scheduled
+Week 3	Consumer validation and testing window	Open
+Week 4	Production rollout after sign-off	Planned
 
 
 ⸻
 
-✅ End Result:
-The Get Document endpoint will produce only application/pdf and application/json responses,
-aligning with AESIG’s downstream integrations, improving clarity, and eliminating the use of ambiguous binary response types.
+Need Help?
+
+If you have questions or need assistance validating this change, please contact the AESIG API team at
+📧 aesig-api-support@td.com￼
 
 ⸻
 
-Would you like me to now compile all four endpoints into one combined Confluence master page (with internal navigation links like a mini index),
-or would you prefer I wait until we also generate the Consumer Notification Email section later and include that at the end of the master page?
+Thank you for your continued partnership as we enhance API consistency and reliability across the AESIG platform.
+
+Kind regards,
+AESIG API Team
+TD Bank Group
+
+⸻
+
+Would you like me to also create a short internal version (for TD internal consumers on the API gateway, e.g., “FYI-only, no external mailing”)?
+That version usually omits the rollout plan and contact info but keeps the table + examples compact.
