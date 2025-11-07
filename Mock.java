@@ -1,71 +1,89 @@
-Perfect — that’s actually an important clarification.
-
-From your screenshot, it looks like your API currently returns an HTTP 200 OK with an empty JSON body ({}) or empty text response, meaning no actual data payload is being sent — just the status code confirming success.
-
-Here’s how you can slightly update the email to reflect this situation clearly and help consumers understand that the change will affect content type, not data semantics.
+Got it ✅ — here’s a comprehensive and professional email draft combining all your findings, including both Update Transaction and Delete Transaction scenarios, Postman observations, controller behavior, and OneSpan integration notes.
 
 ⸻
 
-Revised Email Draft
-
-Subject: Deprecation Notice: Removal of text/plain Response Type from eSignature Events API
+Subject: Deprecation of text/plain Response Type for AESIG API (Update & Delete Transaction Endpoints)
 
 ⸻
 
 Dear Consumer Team,
 
-We would like to inform you that we are planning to remove the text/plain response type support from the PATCH /esignatureevents/{eventId} API endpoint.
-
-Currently, this endpoint supports two response formats via the produces attribute:
-
-produces = {"text/plain", "application/json"}
-
-When no Accept header is provided, the API defaults to returning a text/plain response.
+As part of our ongoing API standardization initiative, we are planning to remove the text/plain response type from the following AESIG API endpoints:
+	•	PATCH /esignatureevents/{eventId} (Update Transaction)
+	•	DELETE /esignatureevents/{eventId} (Delete Transaction)
 
 ⸻
 
-📢 Planned Change
+🧩 Current Behavior
 
-We will soon remove text/plain from the supported response types:
+Update Transaction (PATCH):
 
-produces = {"application/json"}
+@RequestMapping(
+    method = RequestMethod.PATCH,
+    value = "/esignatureevents/{eventId}",
+    produces = {"text/plain", "application/json"},
+    consumes = {"application/json"}
+)
+
+Delete Transaction (DELETE):
+
+@RequestMapping(
+    method = RequestMethod.DELETE,
+    value = "/esignatureevents/{eventId}",
+    produces = {"text/plain", "application/json"}
+)
+
+	•	When no Accept header is provided, Spring automatically defaults to the first media type listed in produces — i.e., text/plain.
+	•	The AESIG API currently does not return any actual payload in these endpoints, only a 200 OK status with an empty response body.
+
+⸻
+
+🧠 Observations (from Testing)
+	1.	OneSpan Integration
+	•	OneSpan does not accept text/plain; it only supports application/json.
+	•	Hence, there’s no scenario where OneSpan sends Accept: text/plain.
+	•	Clients that already send Accept: application/json are not impacted.
+	2.	Default Fallback Behavior
+	•	If a client does not send an Accept header, AESIG automatically sends Accept: */* to OneSpan.
+	•	Spring’s controller, however, will serve the response in the first listed produces type (text/plain), which OneSpan accepts as RAW response.
+	3.	Potential Impact
+	•	After we remove text/plain, any client not sending Accept will start receiving a JSON Content-Type (application/json) by default.
+	•	If such clients parse the raw response or rely on a specific Content-Type, they may experience behavioral differences.
+
+⸻
+
+🧾 Example Comparison
+
+Scenario	Current Behavior	After Removal of text/plain
+Accept: text/plain	200 OK, Content-Type: text/plain	❌ 406 Not Acceptable
+Accept: application/json	200 OK, Content-Type: application/json	✅ 200 OK, no change
+No Accept header	200 OK, defaults to text/plain	✅ 200 OK, defaults to application/json
 
 
 ⸻
 
-⚙️ What This Means for You
-
-After this change:
-	•	If your client explicitly sends Accept: text/plain, the API will respond with HTTP 406 – Not Acceptable.
-	•	If no Accept header is provided, the response will default to application/json.
-	•	The API currently does not return any payload, only an HTTP status code confirming success, so there is no change in actual data, only in the response Content-Type header.
-
-For example:
-
-Scenario	Old Behavior	New Behavior
-Accept: text/plain	200 OK, Content-Type: text/plain, body: (empty)	❌ 406 Not Acceptable
-No Accept header	200 OK, Content-Type: text/plain	✅ 200 OK, Content-Type: application/json
-Accept: application/json	200 OK, Content-Type: application/json	✅ 200 OK, Content-Type: application/json
-
+📸 Screenshots (for reference)
+	•	Postman Results: show both PATCH and DELETE returning 200 OK with empty body.
+	•	Code Snippets: show produces = {"text/plain", "application/json"} in both methods.
+	•	Notes Summary: highlight that OneSpan accepts JSON and not plain text.
 
 ⸻
 
-✅ Action Required
-
-Please ensure that your client applications or integration layers:
-	•	Send Accept: application/json in all requests.
-	•	Do not depend on the text/plain Content-Type in any response validation or parsing logic.
+✅ Conclusion & Next Steps
+	•	Clients that already use Accept: application/json are not impacted.
+	•	We need to confirm with consumers who do not send any Accept header, as they will start receiving a JSON response (instead of raw/plain text).
+	•	This change improves consistency across AESIG endpoints and aligns with OneSpan’s accepted media types.
 
 ⸻
 
 🗓️ Tentative Timeline
 
-We recommend completing the required changes by [insert target date, e.g., December 15, 2025].
-This change will first be deployed to DEV and UAT, followed by PROD once all consumers confirm readiness.
+We plan to deploy this change to DEV/UAT first for consumer validation, and later to PROD after confirming no consumer dependency on text/plain.
+Please confirm your applications’ readiness by [insert target date, e.g., December 20, 2025].
 
-If you have any questions or need support during testing, please contact the AESIG API team.
+⸻
 
-Thank you for your cooperation and support.
+If you have any questions or need assistance during testing, please reach out to the AESIG API team.
 
 Best regards,
 AESIG API Team
@@ -73,4 +91,4 @@ TD Bank
 
 ⸻
 
-Would you like me to make this slightly shorter and more business-friendly (for internal posting or Teams announcement) or keep it as this formal technical notice version for email distribution?
+Would you like me to include the screenshots inline in the email (as embedded images) or just mention them as attachments with descriptive filenames (like DeleteTransaction_Postman.png, UpdateTransaction_Code.png)?
