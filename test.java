@@ -1,5 +1,5 @@
-You can tell her this 👇
-
-We can add a unique constraint on (APP_ID, LOB_ID, PROP_NAME) in the CONFIGURATION table.
-This will ensure that no one — not even through API or SQL — can insert duplicate configurations with the same combination.
-It enforces uniqueness directly at the database level, not just in code.
+| Scenario | Current Behavior | After Change | Impact |
+|-----------|------------------|--------------|---------|
+| `Accept: application/json` | ✅ 200 OK | ✅ 200 OK | None |
+| `Accept: text/plain` | ✅ 200 OK | ❌ 406 Not Acceptable | Must use JSON |
+| No `Accept` header | Defaults to `text/plain` | Defaults to `application/json` | Verify consumer parsing logic |
