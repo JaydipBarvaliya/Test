@@ -1,42 +1,47 @@
-@Component
-public class ESignatureEventGetSignatureResMapper {
+public ResponseEntity<Resource> getDocumentPdfWithStats(
+        HttpHeaders httpHeaders,
+        String packageId,
+        String documentId,
+        String lobId
+) {
 
-    public ResponseEntity<Resource> mapPdfResponse(
-            ResponseEntity<byte[]> upstream,
-            String fileName
-    ) {
+    HeaderInfo headerInfo = new HeaderInfo(
+            lobId,
+            TransactionType.GET_SINGLE_DOCUMENT.getDescription(),
+            httpHeaders
+    );
+    headerInfo.setApiRequestStartTime(System.currentTimeMillis());
 
-        // Same logic as your old mapResponse: only handle 200 OK
-        if (upstream == null ||
-            !upstream.getStatusCode().is2xxSuccessful() ||
-            upstream.getBody() == null) {
+    String saasUrl = saasValidationTokenService
+            .buildSaasInputInfo(httpHeaders, lobId)
+            .getSaasUrl();
 
-            return ResponseEntity
-                    .status(
-                        upstream != null
-                            ? upstream.getStatusCode()
-                            : HttpStatus.INTERNAL_SERVER_ERROR
-                    )
-                    .build();
-        }
+    // OneSpan returns byte[]
+    ResponseEntity<byte[]> upstream =
+            eslGateway.getDocumentPdf(
+                    httpHeaders,
+                    packageId,
+                    documentId,
+                    saasUrl,
+                    false
+            );
 
-        byte[] pdfBytes = upstream.getBody();
+    // Map to Resource
+    ResponseEntity<Resource> finalResponse =
+            getSignResponseMapper.mapPdfResponse(
+                    upstream,
+                    documentId + ".pdf"
+            );
 
-        ByteArrayResource resource = new ByteArrayResource(pdfBytes);
+    log.debug("Document PDF with stats completed successfully");
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.add(HttpHeaders.CONTENT_DISPOSITION,
-                "attachment; filename=" + fileName);
+    headerInfoMapper.populateHeaderInfo(
+            headerInfo,
+            finalResponse,
+            TransactionType.GET_SINGLE_DOCUMENT.getShortForm()
+    );
 
-        headers.setContentLength(pdfBytes.length);
+    persistStats(headerInfo, upstream, finalResponse);
 
-        // Content-Type: preserve from OneSpan OR default to PDF
-        MediaType contentType = upstream.getHeaders().getContentType();
-        if (contentType == null) {
-            contentType = MediaType.APPLICATION_PDF;
-        }
-        headers.setContentType(contentType);
-
-        return new ResponseEntity<>(resource, headers, HttpStatus.OK);
-    }
+    return finalResponse;
 }
