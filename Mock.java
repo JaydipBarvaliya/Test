@@ -1,24 +1,38 @@
-Here are your three problems and their clean, sharp two–three line explanations.
-Use these directly in your documentation.
+public ResponseEntity<Resource> getDocumentPdfWithStats(
+        HttpHeaders httpHeaders,
+        String packageId,
+        String documentId,
+        String lobId) {
 
-⸻
+    HeaderInfo headerInfo = new HeaderInfo(lobId,
+            TransactionType.GET_SINGLE_DOCUMENT.getDescription(),
+            httpHeaders);
 
-✅ 1. Version Drift Between Parent Versions
+    headerInfo.setApiRequestStartTime(System.currentTimeMillis());
 
-When AESIG-API directly uses AESIG-Parent but OSS-Token still uses an older parent version, the API ends up inheriting two different parent versions: one directly and one transitively through OSS-Token. This creates version drift, inconsistent Spring Boot versions, and unpredictable build behavior.
+    String saasUrl = saasValidationTokenService.buildSaasInputInfo(httpHeaders, lobId).getSaasUrl();
 
-⸻
+    // OneSpan returns PDF as byte[]
+    ResponseEntity<byte[]> responseEntity =
+            eslGateway.getDocumentPdf(httpHeaders, packageId, documentId, saasUrl, false);
 
-✅ 2. Duplicate / Conflicting Dependencies
+    log.debug("Document PDF with stats completed successfully");
 
-Because AESIG-API was pulling parent, util, and DAL both directly and indirectly through OSS-Token, the project often ended up with duplicate dependencies, conflicting versions, and clashing transitive trees. This produced Maven warnings, IntelliJ red marks, runtime risks, and unnecessary complexity.
+    // Convert byte[] to Spring Resource
+    byte[] pdfBytes = responseEntity.getBody();
+    Resource resource = new ByteArrayResource(pdfBytes);
 
-⸻
+    // Build final response
+    ResponseEntity<Resource> finalResponse = ResponseEntity
+            .status(responseEntity.getStatusCode())
+            .headers(responseEntity.getHeaders())
+            .contentType(responseEntity.getHeaders().getContentType())
+            .body(resource);
 
-✅ 3. Incorrect Util Usage Without DAL Validation
+    // Persist stats as you already do
+    headerInfoMapper.populateHeaderInfo(headerInfo, finalResponse,
+            TransactionType.GET_SINGLE_DOCUMENT.getShortForm());
+    persistStats(headerInfo, responseEntity, finalResponse);
 
-Previously, OSS-Token could import Common-Util directly. A util change that worked in OSS-Token could still break Common-DAL, causing inconsistent behavior across the ecosystem. To avoid this, we enforced a clean hierarchy: Parent → Util → DAL → Token → API, ensuring DAL validates every util change before OSS-Token or any API consumes it.
-
-⸻
-
-If you want, I can format this into a Confluence-ready paragraph or a bullet-style design decision section.
+    return finalResponse;
+}
