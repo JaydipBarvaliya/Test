@@ -1,47 +1,28 @@
-public ResponseEntity<Resource> getDocumentPdfWithStats(
-        HttpHeaders httpHeaders,
-        String packageId,
-        String documentId,
-        String lobId
-) {
+public ResponseEntity<?> mapResponse(ResponseEntity<?> responseEntity, String fileToSave, String acceptHeader) {
 
-    HeaderInfo headerInfo = new HeaderInfo(
-            lobId,
-            TransactionType.GET_SINGLE_DOCUMENT.getDescription(),
-            httpHeaders
-    );
-    headerInfo.setApiRequestStartTime(System.currentTimeMillis());
+    if (responseEntity.getStatusCode() == HttpStatus.OK && responseEntity.getBody() != null) {
+        
+        byte[] bytes = (byte[]) responseEntity.getBody();
+        HttpHeaders headers = new HttpHeaders();
 
-    String saasUrl = saasValidationTokenService
-            .buildSaasInputInfo(httpHeaders, lobId)
-            .getSaasUrl();
+        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + fileToSave);
 
-    // OneSpan returns byte[]
-    ResponseEntity<byte[]> upstream =
-            eslGateway.getDocumentPdf(
-                    httpHeaders,
-                    packageId,
-                    documentId,
-                    saasUrl,
-                    false
-            );
+        // 1. Respect Accept header if present
+        if ("application/pdf".equalsIgnoreCase(acceptHeader)) {
+            headers.setContentType(MediaType.APPLICATION_PDF);
+        }
+        else if ("application/octet-stream".equalsIgnoreCase(acceptHeader)) {
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        }
+        else {
+            // 2. Default behavior when Accept is missing → return octet-stream
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        }
 
-    // Map to Resource
-    ResponseEntity<Resource> finalResponse =
-            getSignResponseMapper.mapPdfResponse(
-                    upstream,
-                    documentId + ".pdf"
-            );
+        headers.setContentLength(bytes.length);
 
-    log.debug("Document PDF with stats completed successfully");
+        return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+    }
 
-    headerInfoMapper.populateHeaderInfo(
-            headerInfo,
-            finalResponse,
-            TransactionType.GET_SINGLE_DOCUMENT.getShortForm()
-    );
-
-    persistStats(headerInfo, upstream, finalResponse);
-
-    return finalResponse;
+    return null;
 }
