@@ -1,34 +1,22 @@
-public ResponseEntity<Resource> getDocumentPdfWithStats(
-        HttpHeaders httpHeaders,
-        String packageId,
-        String documentId,
-        String lobId
+public ResponseEntity<Resource> mapPdfResponse(
+        ResponseEntity<byte[]> oneSpanResponse,
+        String fileName
 ) {
+    byte[] pdfBytes = oneSpanResponse.getBody();
+    Resource resource = new ByteArrayResource(pdfBytes);
 
-    HeaderInfo headerInfo = new HeaderInfo(lobId,
-            TransactionType.GET_SINGLE_DOCUMENT.getDescription(),
-            httpHeaders);
+    HttpHeaders headers = new HttpHeaders();
+    headers.putAll(oneSpanResponse.getHeaders());
 
-    headerInfo.setApiRequestStartTime(System.currentTimeMillis());
+    // optional: override Content-Disposition
+    headers.setContentDisposition(
+        ContentDisposition.attachment()
+            .filename(fileName + ".pdf")
+            .build()
+    );
 
-    String saasUrl = saasValidationTokenService
-            .buildSaasInputInfo(httpHeaders, lobId)
-            .getSaasUrl();
-
-    ResponseEntity<byte[]> oneSpanResponse =
-            eslGateway.getDocumentPdf(httpHeaders, packageId, documentId, saasUrl, false);
-
-    // 🔥 your mapper, now correctly returning Resource
-    ResponseEntity<Resource> finalResponse =
-            getSignResponseMapper.mapPdfResponse(oneSpanResponse, documentId);
-
-    log.debug("Document Pdf with stats completed successfully");
-
-    headerInfoMapper.populateHeaderInfo(headerInfo,
-            finalResponse,
-            TransactionType.GET_SINGLE_DOCUMENT.getShortForm());
-
-    persistStats(headerInfo, oneSpanResponse, finalResponse);
-
-    return finalResponse;
+    return ResponseEntity
+            .status(oneSpanResponse.getStatusCode())
+            .headers(headers)
+            .body(resource);
 }
