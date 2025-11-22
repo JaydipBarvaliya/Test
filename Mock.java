@@ -1,27 +1,28 @@
-public ResponseEntity<Resource> mapPdfResponse(ResponseEntity<byte[]> responseEntity,
-                                               String fileToSave) {
+public ResponseEntity<?> mapResponse(ResponseEntity<?> responseEntity, String fileToSave, String acceptHeader) {
 
-    // preserve the old behavior: only care about 200 OK, else return null
-    if (!responseEntity.getStatusCode().is2xxSuccessful() ||
-        responseEntity.getBody() == null) {
-        return null;
+    if (responseEntity.getStatusCode() == HttpStatus.OK && responseEntity.getBody() != null) {
+        
+        byte[] bytes = (byte[]) responseEntity.getBody();
+        HttpHeaders headers = new HttpHeaders();
+
+        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + fileToSave);
+
+        // 1. Respect Accept header if present
+        if ("application/pdf".equalsIgnoreCase(acceptHeader)) {
+            headers.setContentType(MediaType.APPLICATION_PDF);
+        }
+        else if ("application/octet-stream".equalsIgnoreCase(acceptHeader)) {
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        }
+        else {
+            // 2. Default behavior when Accept is missing → return octet-stream
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        }
+
+        headers.setContentLength(bytes.length);
+
+        return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
     }
 
-    byte[] body = responseEntity.getBody();
-
-    HttpHeaders headers = new HttpHeaders();
-
-    // EXACT same header behavior as old mapResponse
-    headers.add(HttpHeaders.CONTENT_DISPOSITION,
-                "attachment; filename=" + fileToSave);
-
-    headers.setContentLength(body.length);
-
-    // DO NOT set Content-Type (matches your old logic exactly)
-    // Spring will choose based on Accept, just like before.
-
-    // Return same bytes, but wrapped as Resource
-    Resource resource = new ByteArrayResource(body);
-
-    return new ResponseEntity<>(resource, headers, HttpStatus.OK);
+    return null;
 }
