@@ -1,28 +1,42 @@
-public ResponseEntity<?> mapResponse(ResponseEntity<?> responseEntity, String fileToSave, String acceptHeader) {
+@Component
+public class ESignatureEventGetSignatureResMapper {
 
-    if (responseEntity.getStatusCode() == HttpStatus.OK && responseEntity.getBody() != null) {
-        
-        byte[] bytes = (byte[]) responseEntity.getBody();
+    public ResponseEntity<Resource> mapPdfResponse(
+            ResponseEntity<byte[]> upstream,
+            String fileName
+    ) {
+
+        // Same logic as your old mapResponse: only handle 200 OK
+        if (upstream == null ||
+            !upstream.getStatusCode().is2xxSuccessful() ||
+            upstream.getBody() == null) {
+
+            return ResponseEntity
+                    .status(
+                        upstream != null
+                            ? upstream.getStatusCode()
+                            : HttpStatus.INTERNAL_SERVER_ERROR
+                    )
+                    .build();
+        }
+
+        byte[] pdfBytes = upstream.getBody();
+
+        ByteArrayResource resource = new ByteArrayResource(pdfBytes);
+
         HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=" + fileName);
 
-        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + fileToSave);
+        headers.setContentLength(pdfBytes.length);
 
-        // 1. Respect Accept header if present
-        if ("application/pdf".equalsIgnoreCase(acceptHeader)) {
-            headers.setContentType(MediaType.APPLICATION_PDF);
+        // Content-Type: preserve from OneSpan OR default to PDF
+        MediaType contentType = upstream.getHeaders().getContentType();
+        if (contentType == null) {
+            contentType = MediaType.APPLICATION_PDF;
         }
-        else if ("application/octet-stream".equalsIgnoreCase(acceptHeader)) {
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-        }
-        else {
-            // 2. Default behavior when Accept is missing → return octet-stream
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-        }
+        headers.setContentType(contentType);
 
-        headers.setContentLength(bytes.length);
-
-        return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+        return new ResponseEntity<>(resource, headers, HttpStatus.OK);
     }
-
-    return null;
 }
