@@ -2,7 +2,8 @@ public ResponseEntity<Resource> getDocumentPdfWithStats(
         HttpHeaders httpHeaders,
         String packageId,
         String documentId,
-        String lobId) {
+        String lobId
+) {
 
     HeaderInfo headerInfo = new HeaderInfo(lobId,
             TransactionType.GET_SINGLE_DOCUMENT.getDescription(),
@@ -10,29 +11,24 @@ public ResponseEntity<Resource> getDocumentPdfWithStats(
 
     headerInfo.setApiRequestStartTime(System.currentTimeMillis());
 
-    String saasUrl = saasValidationTokenService.buildSaasInputInfo(httpHeaders, lobId).getSaasUrl();
+    String saasUrl = saasValidationTokenService
+            .buildSaasInputInfo(httpHeaders, lobId)
+            .getSaasUrl();
 
-    // OneSpan returns PDF as byte[]
-    ResponseEntity<byte[]> responseEntity =
+    ResponseEntity<byte[]> oneSpanResponse =
             eslGateway.getDocumentPdf(httpHeaders, packageId, documentId, saasUrl, false);
 
-    log.debug("Document PDF with stats completed successfully");
+    // 🔥 your mapper, now correctly returning Resource
+    ResponseEntity<Resource> finalResponse =
+            getSignResponseMapper.mapPdfResponse(oneSpanResponse, documentId);
 
-    // Convert byte[] to Spring Resource
-    byte[] pdfBytes = responseEntity.getBody();
-    Resource resource = new ByteArrayResource(pdfBytes);
+    log.debug("Document Pdf with stats completed successfully");
 
-    // Build final response
-    ResponseEntity<Resource> finalResponse = ResponseEntity
-            .status(responseEntity.getStatusCode())
-            .headers(responseEntity.getHeaders())
-            .contentType(responseEntity.getHeaders().getContentType())
-            .body(resource);
-
-    // Persist stats as you already do
-    headerInfoMapper.populateHeaderInfo(headerInfo, finalResponse,
+    headerInfoMapper.populateHeaderInfo(headerInfo,
+            finalResponse,
             TransactionType.GET_SINGLE_DOCUMENT.getShortForm());
-    persistStats(headerInfo, responseEntity, finalResponse);
+
+    persistStats(headerInfo, oneSpanResponse, finalResponse);
 
     return finalResponse;
 }
