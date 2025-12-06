@@ -1,15 +1,15 @@
-Here is a clean, straight, and professional Problem / Solution pair for the static-method removal and DI migration.
+Here is the clean Problem / Solution pair you can drop straight into your Confluence table.
 
 ⸻
 
-Replaced Static Method Usage with Dependency Injection
+Migration from XLogger (xSlf4j) to SLF4J
 
 Problem:
-Several components relied on static methods, which made the code tightly coupled, hard to test, and incompatible with Spring’s lifecycle and dependency management.
+The project was using Logback’s XLogger API, which is tightly coupled to Logback, not widely supported, and prevents clean logging abstraction, making the code less portable and harder to maintain.
 
 Solution:
-Removed static method usage and refactored the code to use Spring-managed beans through dependency injection, improving testability, reducing coupling, and ensuring consistent behavior across the application.
+Replaced XLogger usage with the standard SLF4J logger to ensure proper logging abstraction, improve compatibility with Spring Boot, and maintain a consistent, industry-standard logging approach across all modules.
 
 ⸻
 
-If you want it in the exact table tone with “Solution Note,” I can adapt it.
+If you want a “Solution Note” style like your earlier entries, tell me.
