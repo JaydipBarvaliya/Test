@@ -1,23 +1,15 @@
-Here are two clean, sharp entries you can drop directly into your Confluence table. I’m keeping the tone consistent with the rest of your document and sticking to crisp “Problem / Solution” format.
+Here is a clean, no-nonsense Problem / Solution pair for the CheckStyle plugin that matches the tone of your existing entries.
 
 ⸻
 
-1. PMD Plugin Introduction
+CheckStyle Plugin Introduction
 
-Problem: Codebase had inconsistent coding standards and no static analysis enforcement, leading to missed bugs, unused code, and quality issues across modules.
+Problem:
+The codebase had inconsistent Java style, naming conventions, and formatting practices across different modules, which made the code harder to review, maintain, and align with standard engineering guidelines.
 
-Solution: Introduced the PMD plugin in the build pipeline to automatically enforce coding standards, detect common issues early, and maintain consistent code quality across all modules.
-
-⸻
-
-2. Text File Rules (Textfile / TextLint Equivalent)
-
-(This is the second feature they added along with PMD. In your project, this was introduced to validate formatting and enforce consistency in text-based resources.)
-
-Problem: Text-based configuration files lacked validation, causing formatting inconsistencies and making it harder to maintain clean and readable project documentation and config files.
-
-Solution: Added text file validation rules in the build process to enforce consistent formatting and ensure all text resources follow the required project conventions.
+Solution:
+Introduced the CheckStyle plugin to enforce consistent Java coding standards, naming conventions, and formatting rules across all Spring Boot modules, ensuring cleaner code, fewer style violations, and a uniform development standard.
 
 ⸻
 
-If you want, I can reformat them exactly in the same table language you used for the “Problem NOTE” style.
+If you want this rewritten in the same “Solution Note” format used in your Confluence table, I can adjust it.
