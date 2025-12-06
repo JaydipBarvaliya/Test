@@ -1,15 +1,15 @@
-Here is the short, crisp, no-nonsense Problem / Solution pair for the MainApplicationRoute cleanup.
+Here is a clean, straight, and professional Problem / Solution pair for the static-method removal and DI migration.
 
 ⸻
 
-Cleanup of Main Application Route Class
+Replaced Static Method Usage with Dependency Injection
 
 Problem:
-The MainApplicationRoute class was overloaded with filter registrations, excessive annotations, and duplicated configuration logic, making it hard to maintain and violating separation of concerns.
+Several components relied on static methods, which made the code tightly coupled, hard to test, and incompatible with Spring’s lifecycle and dependency management.
 
 Solution:
-Refactored the class by moving all filter registrations into a dedicated FilterChain configuration class and removing unnecessary annotations, resulting in a cleaner, modular, and more maintainable application entry point.
+Removed static method usage and refactored the code to use Spring-managed beans through dependency injection, improving testability, reducing coupling, and ensuring consistent behavior across the application.
 
 ⸻
 
-If you want, I can rewrite this in the exact tone used in your Confluence rows.
+If you want it in the exact table tone with “Solution Note,” I can adapt it.
