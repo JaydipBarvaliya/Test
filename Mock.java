@@ -1,15 +1,15 @@
-Here is the clean Problem / Solution pair you can drop straight into your Confluence table.
+Here is the crisp Problem / Solution pair for moving from field injection to constructor injection.
 
 ⸻
 
-Migration from XLogger (xSlf4j) to SLF4J
+Migration from Field Injection to Constructor Injection
 
 Problem:
-The project was using Logback’s XLogger API, which is tightly coupled to Logback, not widely supported, and prevents clean logging abstraction, making the code less portable and harder to maintain.
+Field injection made the code harder to test, hid required dependencies, and caused potential null-initialization issues since Spring cannot enforce dependency completeness at compile time.
 
 Solution:
-Replaced XLogger usage with the standard SLF4J logger to ensure proper logging abstraction, improve compatibility with Spring Boot, and maintain a consistent, industry-standard logging approach across all modules.
+Replaced field injection with constructor injection so that all required dependencies are clearly defined, immutable, and validated at object creation time, improving testability, maintainability, and overall code quality.
 
 ⸻
 
-If you want a “Solution Note” style like your earlier entries, tell me.
+If you want it rewritten to match your Confluence tone exactly, I can tune it.
