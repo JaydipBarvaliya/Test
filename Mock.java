@@ -1,15 +1,15 @@
-Here is a clean, no-nonsense Problem / Solution pair for the CheckStyle plugin that matches the tone of your existing entries.
+Here is the short, crisp, no-nonsense Problem / Solution pair for the MainApplicationRoute cleanup.
 
 ⸻
 
-CheckStyle Plugin Introduction
+Cleanup of Main Application Route Class
 
 Problem:
-The codebase had inconsistent Java style, naming conventions, and formatting practices across different modules, which made the code harder to review, maintain, and align with standard engineering guidelines.
+The MainApplicationRoute class was overloaded with filter registrations, excessive annotations, and duplicated configuration logic, making it hard to maintain and violating separation of concerns.
 
 Solution:
-Introduced the CheckStyle plugin to enforce consistent Java coding standards, naming conventions, and formatting rules across all Spring Boot modules, ensuring cleaner code, fewer style violations, and a uniform development standard.
+Refactored the class by moving all filter registrations into a dedicated FilterChain configuration class and removing unnecessary annotations, resulting in a cleaner, modular, and more maintainable application entry point.
 
 ⸻
 
-If you want this rewritten in the same “Solution Note” format used in your Confluence table, I can adjust it.
+If you want, I can rewrite this in the exact tone used in your Confluence rows.
