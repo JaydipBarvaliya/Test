@@ -65,5 +65,9 @@ public class OsvClient {
 GET /api/projects/{name}/vulnerabilities
 
 
+    GET /api/projects/aesig-api/vulnerabilities?pom=C:/Codebase/GITHUB/aesig-api/pom.xml
+
+    
+
 
     
