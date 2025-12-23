@@ -1,12 +1,26 @@
-pm.test("Fetch project name and normalized pom path", function () {
-    const jsonData = pm.response.json();
+// Example Maven output line:
+// org.mozilla:rhino:jar:1.7.13:compile -- module rhino (auto)
 
-    const projectName = jsonData[0].name;
-    const rawPomPath = jsonData[0].pomPath;
+if (line.contains(":jar:")) {
 
-    // Replace backslashes with forward slashes
-    const normalizedPomPath = rawPomPath.replace(/\\/g, "/");
+    String cleaned = line.replace("[INFO]", "").trim();
 
-    pm.environment.set("project-name", projectName);
-    pm.environment.set("pom-path", normalizedPomPath);
-});
+    // Remove everything after scope (e.g. "-- module xyz")
+    cleaned = cleaned.split(" -- ")[0];
+
+    String[] parts = cleaned.split(":");
+
+    if (parts.length >= 5) {
+        String groupId = parts[0];
+        String artifactId = parts[1];
+        String version = parts[3];
+        String scope = parts[4];
+
+        result.add(new DependencyRef(
+            groupId,
+            artifactId,
+            version,
+            scope
+        ));
+    }
+}
