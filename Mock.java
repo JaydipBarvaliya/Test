@@ -1,13 +1,12 @@
-if (line.contains(":jar:") && line.contains(":runtime")) {
-    String cleaned = line.replace("[INFO]", "").trim();
-    String[] parts = cleaned.split(":");
+ProcessBuilder pb = new ProcessBuilder(
+    "cmd.exe", "/c",
+    "mvnw.cmd",
+    "-s", "C:\\Users\\taf5028\\.m2\\settings.xml",
+    "-f", pomPath,
+    "dependency:list",
+    "-DincludeScope=runtime",
+    "-DoutputAbsoluteArtifactFilename=false"
+);
 
-    if (parts.length >= 5) {
-        result.add(new DependencyRef(
-            parts[0],
-            parts[1],
-            parts[3],
-            parts[4]
-        ));
-    }
-}
+pb.directory(new File(System.getProperty("user.dir")));
+pb.redirectErrorStream(true);
