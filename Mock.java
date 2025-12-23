@@ -1,32 +1,21 @@
-import org.springframework.stereotype.Service;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
-import java.nio.file.*;
-import java.util.*;
-import java.util.stream.Stream;
+import java.util.List;
 
-@Service
-public class ProjectDiscoveryService {
+@RestController
+@RequestMapping("/api")
+public class ScanController {
 
-    public List<ProjectRef> discoverProjects(String rootDir) throws IOException {
-        Path root = Paths.get(rootDir).toAbsolutePath().normalize();
-        if (!Files.isDirectory(root)) {
-            throw new IllegalArgumentException("Not a directory: " + root);
-        }
+    private final ProjectDiscoveryService discovery;
 
-        try (Stream<Path> stream = Files.walk(root)) {
-            return stream
-                .filter(p -> p.getFileName().toString().equalsIgnoreCase("pom.xml"))
-                .filter(p -> !p.toString().contains(FileSystems.getDefault().getSeparator() + "target" + FileSystems.getDefault().getSeparator()))
-                .map(p -> new ProjectRef(projectNameFromPom(p), p.toString()))
-                .sorted(Comparator.comparing(ProjectRef::name))
-                .toList();
-        }
+    public ScanController(ProjectDiscoveryService discovery) {
+        this.discovery = discovery;
     }
 
-    private String projectNameFromPom(Path pomPath) {
-        // MVP: folder name (later we will parse artifactId)
-        Path parent = pomPath.getParent();
-        return parent != null ? parent.getFileName().toString() : pomPath.toString();
+    @GetMapping("/projects")
+    public ResponseEntity<List<ProjectRef>> projects(@RequestParam("root") String root) throws IOException {
+        return ResponseEntity.ok(discovery.discoverProjects(root));
     }
 }
