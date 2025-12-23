@@ -1,31 +1,12 @@
-@Service
-public class VulnerabilityScanService {
+pm.test("Fetch project name and normalized pom path", function () {
+    const jsonData = pm.response.json();
 
-    private final DependencyResolverService resolver;
-    private final OsvClient osvClient;
+    const projectName = jsonData[0].name;
+    const rawPomPath = jsonData[0].pomPath;
 
-    public VulnerabilityScanService(
-            DependencyResolverService resolver,
-            OsvClient osvClient) {
-        this.resolver = resolver;
-        this.osvClient = osvClient;
-    }
+    // Replace backslashes with forward slashes
+    const normalizedPomPath = rawPomPath.replace(/\\/g, "/");
 
-    public List<DependencyWithVulns> scan(String pomPath) throws Exception {
-
-        List<DependencyRef> dependencies =
-                resolver.resolveDependencies(pomPath);
-
-        List<DependencyWithVulns> result = new ArrayList<>();
-
-        for (DependencyRef dep : dependencies) {
-            List<VulnerabilityRef> vulns = osvClient.scan(dep);
-
-            if (!vulns.isEmpty()) {
-                result.add(new DependencyWithVulns(dep, vulns));
-            }
-        }
-
-        return result;
-    }
-}
+    pm.environment.set("project-name", projectName);
+    pm.environment.set("pom-path", normalizedPomPath);
+});
