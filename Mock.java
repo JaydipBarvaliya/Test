@@ -1,10 +1,31 @@
-@GetMapping("/projects/{name}/vulnerabilities")
-public ResponseEntity<List<DependencyWithVulns>> vulnerabilities(
-        @PathVariable String name,
-        @RequestParam("pom") String pom
-) throws Exception {
+@Service
+public class VulnerabilityScanService {
 
-    return ResponseEntity.ok(
-        vulnerabilityScanService.scan(pom)
-    );
+    private final DependencyResolverService resolver;
+    private final OsvClient osvClient;
+
+    public VulnerabilityScanService(
+            DependencyResolverService resolver,
+            OsvClient osvClient) {
+        this.resolver = resolver;
+        this.osvClient = osvClient;
+    }
+
+    public List<DependencyWithVulns> scan(String pomPath) throws Exception {
+
+        List<DependencyRef> dependencies =
+                resolver.resolveDependencies(pomPath);
+
+        List<DependencyWithVulns> result = new ArrayList<>();
+
+        for (DependencyRef dep : dependencies) {
+            List<VulnerabilityRef> vulns = osvClient.scan(dep);
+
+            if (!vulns.isEmpty()) {
+                result.add(new DependencyWithVulns(dep, vulns));
+            }
+        }
+
+        return result;
+    }
 }
