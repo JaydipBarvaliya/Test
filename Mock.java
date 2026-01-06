@@ -1,7 +1,1 @@
-return ResponseEntity.ok(
-    vulnerabilityScanService.scan(pom).stream()
-        .filter(d -> !d.getVulnerabilities().isEmpty())
-        .map(DependencyWithVulns::getDependency)
-        .distinct()
-        .toList()
-);
+https://careers.cognizant.com/global-en/jobs/00066477372/senior-uat-tester-with-banking-domain-experience/
