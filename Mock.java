@@ -2,7 +2,7 @@ https://careers.cognizant.com/global-en/jobs/00066477372/senior-uat-tester-with-
 
 
 
-priteshkumarpatel71@gmail.com
+pritesh.glacier@gmail.com
 
 
 
