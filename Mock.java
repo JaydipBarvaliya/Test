@@ -9,14 +9,19 @@ OWNER="springboot:springboot"
 
 HEALTH_RETRIES=10
 HEALTH_SLEEP=5
+LOCALHOST="127.0.0.1"
 
-### APP : SERVICE : HEALTH_URL MAPPING ###
-# format: app-name:systemd-service-name:health-url
+### APP CONFIG ###
+# format:
+# app-name | systemd-service | health-type | health-value
+# health-type = http | tcp
+# health-value = URL (for http) OR port (for tcp)
+
 APPS=(
-  "besig-ops-api:springboot-besig-ops-api:http://localhost:8080/actuator/health"
-  "besig-diamond:springboot-besig-diamond:http://localhost:8081/actuator/health"
-  "besig-sp:springboot-besig-sp:http://localhost:8082/actuator/health"
-  "besig-report:springboot-besig-report:http://localhost:8083/actuator/health"
+  "besig-ops-api|springboot-besig-ops-api|http|https://localhost:8443/actuator/health"
+  "besig-diamond|springboot-besig-diamond|tcp|8081"
+  "besig-report|springboot-besig-report|tcp|8082"
+  "besig-sp|springboot-besig-sp|tcp|8086"
 )
 
 log() {
@@ -34,30 +39,22 @@ while true; do
   echo "----------------------------"
 
   for i in "${!APPS[@]}"; do
-    APP_NAME="${APPS[$i]%%:*}"
+    APP_NAME="${APPS[$i]%%|*}"
     printf "%d) %s\n" "$((i+1))" "$APP_NAME"
   done
-
   echo "0) Exit"
   echo
 
   read -rp "Enter choice: " choice
 
-  if [[ "$choice" == "0" ]]; then
-    echo "Exiting."
-    exit 0
-  fi
+  [[ "$choice" == "0" ]] && exit 0
 
   if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#APPS[@]} )); then
-    echo "Invalid choice. Try again."
+    echo "Invalid choice"
     continue
   fi
 
-  SELECTED="${APPS[$((choice-1))]}"
-
-  APP_NAME="$(cut -d: -f1 <<< "${SELECTED}")"
-  SERVICE_NAME="$(cut -d: -f2 <<< "${SELECTED}")"
-  HEALTH_URL="$(cut -d: -f3 <<< "${SELECTED}")"
+  IFS='|' read -r APP_NAME SERVICE_NAME HEALTH_TYPE HEALTH_VALUE <<< "${APPS[$((choice-1))]}"
 
   DEPLOY_DIR="${BASE_DEPLOY_DIR}/${APP_NAME}"
   FINAL_JAR="${APP_NAME}.jar"
@@ -65,11 +62,11 @@ while true; do
   BACKUP_DIR="/tmp/${APP_NAME}"
   BACKUP_JAR="${BACKUP_DIR}/${FINAL_JAR}"
 
-  ### VERSION LOOP WITH NEXUS CHECK ###
+  ### VERSION CHECK LOOP ###
   while true; do
     echo
     read -rp "Enter version to deploy for ${APP_NAME}: " VERSION
-    [[ -n "$VERSION" ]] || { echo "Version cannot be empty"; continue; }
+    [[ -n "$VERSION" ]] || continue
 
     TMP_JAR="/tmp/${APP_NAME}-${VERSION}.jar"
     JAR_URL="${REPO_URL}/${GROUP_PATH}/${APP_NAME}/${VERSION}/${APP_NAME}-${VERSION}.jar"
@@ -80,11 +77,8 @@ while true; do
       log "Artifact found for version ${VERSION}"
       break
     else
-      echo
-      echo "[WARN] Artifact not found for version: ${VERSION}"
-      echo "[WARN] URL checked:"
-      echo "       ${JAR_URL}"
-      echo "Please enter a valid version."
+      echo "[WARN] Artifact not found for version ${VERSION}"
+      echo "[WARN] ${JAR_URL}"
     fi
   done
 
@@ -92,33 +86,27 @@ while true; do
   log "Application : ${APP_NAME}"
   log "Service     : ${SERVICE_NAME}"
   log "Version     : ${VERSION}"
-  log "Deploy dir  : ${DEPLOY_DIR}"
-  log "Health URL  : ${HEALTH_URL}"
+  log "Health type : ${HEALTH_TYPE}"
+  log "Health val  : ${HEALTH_VALUE}"
   echo
 
   read -rp "Proceed with deployment? (y/n): " confirm
   [[ "$confirm" =~ ^[Yy]$ ]] || continue
 
-  ### SANITY CHECKS ###
-  [[ -d "${DEPLOY_DIR}" ]] || fail "Deploy directory not found: ${DEPLOY_DIR}"
+  [[ -d "${DEPLOY_DIR}" ]] || fail "Deploy dir not found: ${DEPLOY_DIR}"
 
-  if ! systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then
-    fail "Systemd service not found: ${SERVICE_NAME}"
-  fi
+  systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service" \
+    || fail "Service not found: ${SERVICE_NAME}"
 
-  ### STOP SERVICE ###
-  log "Stopping service ${SERVICE_NAME}"
+  ### STOP ###
+  log "Stopping service"
   sudo systemctl stop "${SERVICE_NAME}"
 
   ### BACKUP ###
-  log "Preparing backup"
   sudo mkdir -p "${BACKUP_DIR}"
-
   if [[ -f "${DEPLOY_DIR}/${FINAL_JAR}" ]]; then
     sudo cp "${DEPLOY_DIR}/${FINAL_JAR}" "${BACKUP_JAR}"
-    log "Backup created at ${BACKUP_JAR}"
-  else
-    log "No existing jar found, skipping backup"
+    log "Backup stored at ${BACKUP_JAR}"
   fi
 
   ### DOWNLOAD ###
@@ -126,30 +114,35 @@ while true; do
   curl -fL "${JAR_URL}" -o "${TMP_JAR}"
 
   ### DEPLOY ###
-  log "Deploying new jar"
   sudo mv "${TMP_JAR}" "${DEPLOY_DIR}/${FINAL_JAR}"
   sudo chmod 765 "${DEPLOY_DIR}/${FINAL_JAR}"
   sudo chown "${OWNER}" "${DEPLOY_DIR}/${FINAL_JAR}"
 
-  ### START SERVICE ###
-  log "Starting service ${SERVICE_NAME}"
+  ### START ###
+  log "Starting service"
   sudo systemctl start "${SERVICE_NAME}"
 
   ### HEALTH CHECK ###
   log "Waiting for health check"
 
   for ((i=1; i<=HEALTH_RETRIES; i++)); do
-    if curl -fs "${HEALTH_URL}" | grep -q '"status":"UP"'; then
-      log "Health check passed"
-      log "Deployment successful for ${APP_NAME} (${VERSION})"
-      break
+    if [[ "${HEALTH_TYPE}" == "http" ]]; then
+      if curl -ks "${HEALTH_VALUE}" | grep -q '"status":"UP"'; then
+        log "HTTP health check passed"
+        break
+      fi
+    else
+      if nc -z "${LOCALHOST}" "${HEALTH_VALUE}" 2>/dev/null; then
+        log "TCP port ${HEALTH_VALUE} is open"
+        break
+      fi
     fi
 
     log "Health not ready yet (attempt ${i}/${HEALTH_RETRIES})"
     sleep "${HEALTH_SLEEP}"
 
-    if [[ "$i" -eq "${HEALTH_RETRIES}" ]]; then
-      fail "Health check failed after deployment"
-    fi
+    [[ "$i" -eq "${HEALTH_RETRIES}" ]] && fail "Health check failed"
   done
+
+  log "Deployment successful for ${APP_NAME} (${VERSION})"
 done
