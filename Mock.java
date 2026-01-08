@@ -1,37 +1,19 @@
 #!/bin/bash
 set -euo pipefail
 
-### ARG CHECK ###
-if [[ $# -ne 1 ]]; then
-  echo "Usage: $0 <version>"
-  echo "Example: $0 0.0.22"
-  exit 1
-fi
-
-VERSION="$1"
-
 ### CONSTANTS ###
 REPO_URL="https://repo.td.com/repository/eets-maven-releases"
 GROUP_PATH="com/td/besig"
-ARTIFACT="besig-ops-api"
-
-SERVICE="springboot-besig-ops-api"
-DEPLOY_DIR="/opt/springboot/applications/besig-ops-api"
-FINAL_JAR="${ARTIFACT}.jar"
-
-BACKUP_DIR="/tmp/besig-ops"
-BACKUP_JAR="${BACKUP_DIR}/${FINAL_JAR}"
-
-TMP_JAR="/tmp/${ARTIFACT}-${VERSION}.jar"
-
+BASE_DEPLOY_DIR="/opt/springboot/applications"
 OWNER="springboot:springboot"
 
-HEALTH_URL="http://localhost:8080/actuator/health"
-HEALTH_RETRIES=10
-HEALTH_SLEEP=5
-
-### DERIVED ###
-JAR_URL="${REPO_URL}/${GROUP_PATH}/${ARTIFACT}/${VERSION}/${ARTIFACT}-${VERSION}.jar"
+### APP LIST ###
+APPS=(
+  "basic-ops-api"
+  "basic-diamond-api"
+  "basic-report-api"
+  "basic-sp-api"
+)
 
 log() {
   echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') - $1"
@@ -42,47 +24,91 @@ fail() {
   exit 1
 }
 
-log "Starting deployment of ${ARTIFACT} version ${VERSION}"
+while true; do
+  echo
+  echo "Select application to deploy:"
+  echo "-----------------------------"
 
-### STOP SERVICE ###
-log "Stopping service ${SERVICE}"
-sudo service "${SERVICE}" stop
+  for i in "${!APPS[@]}"; do
+    printf "%d) %s\n" "$((i+1))" "${APPS[$i]}"
+  done
+  echo "0) Exit"
+  echo
 
-### BACKUP ###
-log "Preparing backup directory"
-sudo mkdir -p "${BACKUP_DIR}"
+  read -rp "Enter choice: " choice
 
-if [[ -f "${DEPLOY_DIR}/${FINAL_JAR}" ]]; then
-  log "Backing up existing jar to ${BACKUP_JAR}"
-  sudo cp "${DEPLOY_DIR}/${FINAL_JAR}" "${BACKUP_JAR}"
-else
-  log "No existing jar found, skipping backup"
-fi
-
-### DOWNLOAD ###
-log "Downloading jar from Nexus"
-curl -fL "${JAR_URL}" -o "${TMP_JAR}"
-
-### DEPLOY ###
-log "Deploying new jar"
-sudo mv "${TMP_JAR}" "${DEPLOY_DIR}/${FINAL_JAR}"
-sudo chmod 765 "${DEPLOY_DIR}/${FINAL_JAR}"
-sudo chown "${OWNER}" "${DEPLOY_DIR}/${FINAL_JAR}"
-
-### START SERVICE ###
-log "Starting service ${SERVICE}"
-sudo service "${SERVICE}" start
-
-### HEALTH CHECK ###
-log "Waiting for health check"
-for ((i=1; i<=HEALTH_RETRIES; i++)); do
-  if curl -fs "${HEALTH_URL}" | grep -q '"status":"UP"'; then
-    log "Health check passed"
-    log "Deployment successful"
+  if [[ "$choice" == "0" ]]; then
+    echo "Exiting."
     exit 0
   fi
-  log "Health not UP yet (attempt ${i}/${HEALTH_RETRIES})"
-  sleep "${HEALTH_SLEEP}"
-done
 
-fail "Health check failed after deployment"
+  if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#APPS[@]} )); then
+    echo "Invalid choice. Try again."
+    continue
+  fi
+
+  APP_NAME="${APPS[$((choice-1))]}"
+  SERVICE_NAME="springboot-${APP_NAME}"
+  DEPLOY_DIR="${BASE_DEPLOY_DIR}/${APP_NAME}"
+
+  echo
+  read -rp "Enter version to deploy for ${APP_NAME}: " VERSION
+
+  [[ -n "$VERSION" ]] || {
+    echo "Version cannot be empty"
+    continue
+  }
+
+  FINAL_JAR="${APP_NAME}.jar"
+  TMP_JAR="/tmp/${APP_NAME}-${VERSION}.jar"
+
+  BACKUP_DIR="/tmp/${APP_NAME}"
+  BACKUP_JAR="${BACKUP_DIR}/${FINAL_JAR}"
+
+  JAR_URL="${REPO_URL}/${GROUP_PATH}/${APP_NAME}/${VERSION}/${APP_NAME}-${VERSION}.jar"
+
+  echo
+  log "Application : ${APP_NAME}"
+  log "Version     : ${VERSION}"
+  log "Service     : ${SERVICE_NAME}"
+  log "Deploy dir  : ${DEPLOY_DIR}"
+  log "Jar URL     : ${JAR_URL}"
+  echo
+
+  read -rp "Proceed with deployment? (y/n): " confirm
+  [[ "$confirm" == "y" || "$confirm" == "Y" ]] || continue
+
+  ### SANITY CHECK ###
+  [[ -d "${DEPLOY_DIR}" ]] || fail "Deploy directory not found: ${DEPLOY_DIR}"
+
+  ### STOP SERVICE ###
+  log "Stopping service"
+  sudo systemctl stop "${SERVICE_NAME}"
+
+  ### BACKUP ###
+  log "Preparing backup"
+  sudo mkdir -p "${BACKUP_DIR}"
+
+  if [[ -f "${DEPLOY_DIR}/${FINAL_JAR}" ]]; then
+    sudo cp "${DEPLOY_DIR}/${FINAL_JAR}" "${BACKUP_JAR}"
+    log "Backup created at ${BACKUP_JAR}"
+  else
+    log "No existing jar found, skipping backup"
+  fi
+
+  ### DOWNLOAD ###
+  log "Downloading jar"
+  curl -fL "${JAR_URL}" -o "${TMP_JAR}"
+
+  ### DEPLOY ###
+  log "Deploying new jar"
+  sudo mv "${TMP_JAR}" "${DEPLOY_DIR}/${FINAL_JAR}"
+  sudo chmod 765 "${DEPLOY_DIR}/${FINAL_JAR}"
+  sudo chown "${OWNER}" "${DEPLOY_DIR}/${FINAL_JAR}"
+
+  ### START SERVICE ###
+  log "Starting service"
+  sudo systemctl start "${SERVICE_NAME}"
+
+  log "Deployment completed for ${APP_NAME} ${VERSION}"
+done
