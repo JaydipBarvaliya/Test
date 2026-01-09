@@ -1,3 +1,10 @@
+keytool -list -v \
+  -keystore esignature-esig-api.dev.td.com.p12 \
+  -storetype PKCS12
+
+
+
+
 @Entity
 @Table(name = "STOR_TXN")
 public class StorTxnEntity {
