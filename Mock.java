@@ -1,4 +1,1 @@
-if [[ "$DEPLOY_MODE" == "service" ]]; then
-  systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service" \
-    || fail "Service not found: ${SERVICE_NAME}"
-fi
+IFS='|' read -r APP_NAME SERVICE_NAME DEPLOY_MODE HEALTH_TYPE HEALTH_VALUE <<< "${APPS[$((choice-1))]}"
