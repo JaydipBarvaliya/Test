@@ -1,48 +1,25 @@
-@Slf4j
-@Service
-@RequiredArgsConstructor
-public class BatchDocServiceImpl implements BatchDocService {
+private BatchDocRequest buildBatchDocRequest(StorTxnEntity txn) {
 
-    private final StorTxnRepository storTxnRepository;
-    private final RestTemplate restTemplate;
+    SearchCriteria repoCriteria = new SearchCriteria();
+    repoCriteria.setKeyName("Id");
+    repoCriteria.setKeyValue(txn.getStorFileId());
 
-    @Value("${filenet.batchdoc.url}")
-    private String batchDocUrl;
+    Option outputFileOption = new Option();
+    outputFileOption.setKeyName("outputFileName");
+    outputFileOption.setKeyValue(txn.getFileName());
 
-    @Async
-    @Override
-    public void triggerBatchDocAsync(String dgvlmId) {
-        try {
-            // 1. Fetch STOR_TXN by dgvlmId
-            StorTxnEntity txn = storTxnRepository
-                    .findByDgvlmId(dgvlmId)
-                    .orElseThrow(() -> new IllegalStateException("Transaction not found"));
+    Process process = new Process();
+    process.setRepositorySearchCriteria(List.of(repoCriteria));
+    process.setOption(List.of(outputFileOption));
 
-            // 2. Build BatchDoc request
-            BatchDocRequest request = buildBatchDocRequest(txn);
+    ExtractOption extractOption = new ExtractOption();
+    extractOption.setKeyName("outputType");
+    extractOption.setKeyValue("txt");
 
-            // 3. Call FileNet BatchDoc API
-            ResponseEntity<BatchDocResponse> response =
-                    restTemplate.postForEntity(batchDocUrl, request, BatchDocResponse.class);
+    BatchDocRequest request = new BatchDocRequest();
+    request.setPrimaryRepositoryId(txn.getRepoId());
+    request.setProcess(List.of(process));
+    request.setExtractOption(List.of(extractOption));
 
-            // 4. Update DB on success
-            if (response.getStatusCode().is2xxSuccessful()) {
-                txn.setStorTxnId(response.getBody().getBatchId());
-                txn.setStatus("ACTIVE");
-                txn.setState("FN_BATCH_TRIGGERED");
-                txn.setLastUpdatedTs(Instant.now());
-                storTxnRepository.save(txn);
-            }
-
-        } catch (Exception ex) {
-            log.error("BatchDoc async call failed for dgvlmId={}", dgvlmId, ex);
-
-            storTxnRepository.updateStatusAndState(
-                    dgvlmId,
-                    "ERROR",
-                    "DGVL_PUSHED",
-                    Instant.now()
-            );
-        }
-    }
+    return request;
 }
