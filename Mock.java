@@ -1,19 +1,42 @@
-@Entity
-@Table(name = "STOR_CONFIG")
-public class StorConfigEntity {
+@Override
+public ResponseEntity<Ingest200Response> ingest(
+        String lobId,
+        String traceabilityID,
+        IngestRequest ingestRequest
+) {
 
-    @Id
-    @Column(name = "LOB_ID", nullable = false, updatable = false)
-    private String lobId;
+    // 1. Validate LOB ID using STOR_CONFIG
+    List<StorConfigEntity> storConfigs =
+            storConfigRepository.findByIdLobId(lobId);
 
-    @Column(name = "STOR_SYS", nullable = false)
-    private String storageSystem;
+    if (storConfigs == null || storConfigs.isEmpty()) {
+        log.warn("Invalid LOB ID received: {}", lobId);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
-    @Column(name = "REPO_ID", nullable = false)
-    private String repoId;
+    // 2. Create STOR_TXN record
+    UUID dgvlmId = UUID.randomUUID();
+    OffsetDateTime now = OffsetDateTime.now();
 
-    @Column(name = "FOLDER_PATH", nullable = false)
-    private String folderPath;
+    StorTxnEntity txn = new StorTxnEntity();
+    txn.setDgvlmId(dgvlmId);
+    txn.setLobId(lobId);
+    txn.setDrawerId(ingestRequest.getDrawerId());
+    txn.setFolderId(ingestRequest.getFolderId());
+    txn.setFileName(ingestRequest.getFileName());
+    txn.setStorFileId(ingestRequest.getStorFileId());
+    txn.setStorTxnId(null);
+    txn.setStatus("NEW");
+    txn.setState("RECEIVED");
+    txn.setCreatedTs(now);
+    txn.setLastUpdatedTs(now);
 
-    // getters & setters
+    // 3. Persist
+    storTxnRepository.save(txn);
+
+    // 4. Build response
+    Ingest200Response response = new Ingest200Response();
+    response.setDgvlmId(dgvlmId.toString());
+
+    return ResponseEntity.ok(response);
 }
