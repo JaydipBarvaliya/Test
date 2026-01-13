@@ -1,18 +1,15 @@
-public <T> T post(
-    String url,
-    Object request,
-    Class<T> responseType,
-    Map<String, String> headers
+public BatchDocResponse callBatchDoc(
+    BatchDocRequest request,
+    String traceabilityId,
+    String bearerToken
 ) {
-    return webClient
-        .post()
-        .uri(url)
-        .contentType(MediaType.APPLICATION_JSON)
-        .accept(MediaType.APPLICATION_JSON)
-        .headers(h -> headers.forEach(h::set))
-        .bodyValue(request)
-        .retrieve()
-        .bodyToMono(responseType)
-        .timeout(Duration.ofSeconds(timeoutInSeconds))
-        .block();
+    return post(
+        batchDocUrl,
+        request,
+        BatchDocResponse.class,
+        Map.of(
+            "TraceabilityId", traceabilityId,
+            HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken
+        )
+    );
 }
