@@ -1,20 +1,10 @@
-@Repository
-public interface StorTxnRepository
-        extends JpaRepository<StorageTransaction, UUID> {
+int updated = storTxnRepository.updateStatusAndState(
+    dgvlmId,
+    "ERROR",
+    "DGVM_PUSHED",
+    OffsetDateTime.now(ZoneOffset.UTC)
+);
 
-    @Modifying
-    @Transactional
-    @Query("""
-        update StorageTransaction t
-        set t.status = :status,
-            t.state = :state,
-            t.lastUpdatedTs = :updatedTs
-        where t.dgvlmId = :dgvlmId
-    """)
-    int updateStatusAndState(
-        @Param("dgvlmId") String dgvlmId,
-        @Param("status") String status,
-        @Param("state") String state,
-        @Param("updatedTs") OffsetDateTime updatedTs
-    );
+if (updated == 0) {
+    log.warn("No transaction updated for dgvlmId={}", dgvlmId);
 }
