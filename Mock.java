@@ -1,10 +1,12 @@
-int updated = storTxnRepository.updateStatusAndState(
-    dgvlmId,
-    "ERROR",
-    "DGVM_PUSHED",
-    OffsetDateTime.now(ZoneOffset.UTC)
-);
+@Configuration
+public class WebClientConfig {
 
-if (updated == 0) {
-    log.warn("No transaction updated for dgvlmId={}", dgvlmId);
+    @Bean
+    WebClient fileNetWebClient(
+            @Value("${filenet.batchdoc.url}") String baseUrl) {
+
+        return WebClient.builder()
+                .baseUrl(baseUrl)
+                .build();
+    }
 }
