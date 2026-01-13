@@ -1,12 +1,7 @@
-@Configuration
-public class WebClientConfig {
-
-    @Bean
-    WebClient fileNetWebClient(
-            @Value("${filenet.batchdoc.url}") String baseUrl) {
-
-        return WebClient.builder()
-                .baseUrl(baseUrl)
-                .build();
-    }
-}
+BatchDocResponse response =
+        webClient.post()
+                .uri("")
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono(BatchDocResponse.class)
+                .block();
