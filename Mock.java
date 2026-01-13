@@ -1,25 +1,20 @@
-private BatchDocRequest buildBatchDocRequest(StorTxnEntity txn) {
+@Repository
+public interface StorTxnRepository
+        extends JpaRepository<StorageTransaction, UUID> {
 
-    SearchCriteria repoCriteria = new SearchCriteria();
-    repoCriteria.setKeyName("Id");
-    repoCriteria.setKeyValue(txn.getStorFileId());
-
-    Option outputFileOption = new Option();
-    outputFileOption.setKeyName("outputFileName");
-    outputFileOption.setKeyValue(txn.getFileName());
-
-    Process process = new Process();
-    process.setRepositorySearchCriteria(List.of(repoCriteria));
-    process.setOption(List.of(outputFileOption));
-
-    ExtractOption extractOption = new ExtractOption();
-    extractOption.setKeyName("outputType");
-    extractOption.setKeyValue("txt");
-
-    BatchDocRequest request = new BatchDocRequest();
-    request.setPrimaryRepositoryId(txn.getRepoId());
-    request.setProcess(List.of(process));
-    request.setExtractOption(List.of(extractOption));
-
-    return request;
+    @Modifying
+    @Transactional
+    @Query("""
+        update StorageTransaction t
+        set t.status = :status,
+            t.state = :state,
+            t.lastUpdatedTs = :updatedTs
+        where t.dgvlmId = :dgvlmId
+    """)
+    int updateStatusAndState(
+        @Param("dgvlmId") String dgvlmId,
+        @Param("status") String status,
+        @Param("state") String state,
+        @Param("updatedTs") OffsetDateTime updatedTs
+    );
 }
