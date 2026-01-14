@@ -4,3 +4,12 @@ public enum BatchStatus {
     ERROR,
     SUCCESS
 }
+
+
+
+public enum BatchState {
+    RECEIVED,
+    FN_BATCH_TRIGGERED,
+    DGVL_PUSHED,
+    DGVL_VERIFIED
+}
