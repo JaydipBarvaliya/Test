@@ -1,14 +1,21 @@
-@Modifying
-@Query("""
-  update StorageTransaction t
-  set t.status = :status,
-      t.state = :state,
-      t.lastUpdatedTs = :updatedTs
-  where t.dgvlmId = :dgvlmId
-""")
-void updateTxn(
-    @Param("dgvlmId") String dgvlmId,
-    @Param("status") TxnStatus status,
-    @Param("state") TxnState state,
-    @Param("updatedTs") OffsetDateTime updatedTs
-);
+public class BatchDocRequest {
+
+    private String repositoryId;
+    private String folderPath;
+    private Process process;
+
+    public static class Process {
+        private SearchCriteria searchCriteria;
+        private List<Option> options;
+    }
+
+    public static class SearchCriteria {
+        private String keyName;
+        private String keyValue;
+    }
+
+    public static class Option {
+        private String keyName;
+        private String keyValue;
+    }
+}
