@@ -1,34 +1,22 @@
 @Mapper(componentModel = "spring")
-public interface TransactionMapper {
+public interface StorageTransactionMapper {
 
-    TransactionResponse toResponse(StorTxnEntity entity);
+    @Mapping(target = "txnId", source = "txnId")
+    @Mapping(target = "lobId", source = "lobId")
+    @Mapping(target = "drawerId", source = "request.drawerId")
+    @Mapping(target = "folderId", source = "request.folderId")
+    @Mapping(target = "fileName", source = "request.fileName")
+    @Mapping(target = "fileId", source = "request.fileId")
+    @Mapping(target = "storeFileId", source = "request.storFileId")
+    @Mapping(target = "storTxnId", ignore = true)
+    @Mapping(target = "state", constant = "RECEIVED")
+    @Mapping(target = "status", constant = "NEW")
+    @Mapping(target = "createdTs", source = "now")
+    @Mapping(target = "lastUpdatedTs", source = "now")
+    StorageTransaction toEntity(
+            IngestRequest request,
+            String txnId,
+            String lobId,
+            OffsetDateTime now
+    );
 }
-
-
-
-@Service
-public class TransactionStatusService {
-
-    private final StorTxnRepository repository;
-    private final TransactionMapper mapper;
-
-    public TransactionStatusService(
-            StorTxnRepository repository,
-            TransactionMapper mapper) {
-        this.repository = repository;
-        this.mapper = mapper;
-    }
-
-    public TransactionResponse getTransactionStatus(String txnId) {
-        StorTxnEntity entity = repository.findById(txnId)
-                .orElseThrow(() ->
-                        new EntityNotFoundException(
-                                "Transaction not found for txnId: " + txnId
-                        )
-                );
-
-        return mapper.toResponse(entity);
-    }
-}
-
-
