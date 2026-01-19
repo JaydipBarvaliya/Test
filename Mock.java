@@ -1,22 +1,20 @@
-@Service
-public class TransactionStatusService {
+@RestController
+@RequestMapping("/status")
+public class TransactionStatusController {
 
-    private final StorTxnRepository repository;
-    private final TransactionMapper mapper;
+    private final TransactionStatusService service;
 
-    public TransactionStatusService(
-            StorTxnRepository repository,
-            TransactionMapper mapper) {
-        this.repository = repository;
-        this.mapper = mapper;
+    public TransactionStatusController(TransactionStatusService service) {
+        this.service = service;
     }
 
-    public TransactionResponse getTransactionStatus(String txnId) {
-        StorTxnEntity entity = repository.findById(txnId)
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Transaction not found for txnId: " + txnId)
-                );
+    @GetMapping("/{txnId}")
+    public ResponseEntity<TransactionResponse> getTransactionStatus(
+            @PathVariable String txnId,
+            @RequestHeader("lobId") String lobId,
+            @RequestHeader("traceabilityId") String traceabilityId) {
 
-        return mapper.toResponse(entity);
+        TransactionResponse response = service.getTransactionStatus(txnId);
+        return ResponseEntity.ok(response);
     }
 }
