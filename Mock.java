@@ -1,22 +1,45 @@
-@Mapper(componentModel = "spring")
-public interface StorageTransactionMapper {
+@Service
+public class IngestService {
 
-    @Mapping(target = "txnId", source = "txnId")
-    @Mapping(target = "lobId", source = "lobId")
-    @Mapping(target = "drawerId", source = "request.drawerId")
-    @Mapping(target = "folderId", source = "request.folderId")
-    @Mapping(target = "fileName", source = "request.fileName")
-    @Mapping(target = "fileId", source = "request.fileId")
-    @Mapping(target = "storeFileId", source = "request.storFileId")
-    @Mapping(target = "storTxnId", ignore = true)
-    @Mapping(target = "state", constant = "RECEIVED")
-    @Mapping(target = "status", constant = "NEW")
-    @Mapping(target = "createdTs", source = "now")
-    @Mapping(target = "lastUpdatedTs", source = "now")
-    StorageTransaction toEntity(
-            IngestRequest request,
-            String txnId,
-            String lobId,
-            OffsetDateTime now
-    );
+    private final StorConfigRepository storageConfigRepo;
+    private final StorageTransactionRepository txnRepo;
+    private final StorageTransactionMapper mapper;
+    private final BatchDocService batchDocService;
+
+    public IngestService(
+            StorConfigRepository storageConfigRepo,
+            StorageTransactionRepository txnRepo,
+            StorageTransactionMapper mapper,
+            BatchDocService batchDocService
+    ) {
+        this.storageConfigRepo = storageConfigRepo;
+        this.txnRepo = txnRepo;
+        this.mapper = mapper;
+        this.batchDocService = batchDocService;
+    }
+
+    public String ingest(String lobId, String traceabilityId, IngestRequest request) {
+
+        List<StorageConfigs> configs = storageConfigRepo.findByLobId(lobId);
+        if (configs == null || configs.isEmpty()) {
+            throw new ForbiddenException("Invalid LOB ID");
+        }
+
+        String txnId = UUID.randomUUID().toString();
+        OffsetDateTime now = OffsetDateTime.now();
+
+        StorageTransaction txn =
+                mapper.toEntity(request, txnId, lobId, now);
+
+        txnRepo.save(txn);
+
+        batchDocService.triggerBatchDocAPIAsync(
+                txn,
+                configs.get(0),
+                lobId,
+                traceabilityId
+        );
+
+        return txnId;
+    }
 }
