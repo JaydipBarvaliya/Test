@@ -9,3 +9,13 @@ public ResponseEntity<TransactionResponse> getTransactionStatus(String txnId, St
     TransactionResponse response = transService.getTransactionStatus(txnId);
     return ResponseEntity.ok(response);
 }
+
+
+
+public void validateClientApp(String authorizationHeader, String lobId) throws DgvlmServiceException {
+    HttpHeaders headers = new HttpHeaders();
+    if (authorizationHeader != null && !authorizationHeader.isBlank()) {
+        headers.set(HttpHeaders.AUTHORIZATION, authorizationHeader);
+    }
+    validateClients(headers, lobId);
+}
