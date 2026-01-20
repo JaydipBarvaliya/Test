@@ -1,43 +1,105 @@
-package com.td.dgvlm.api.service;
-
-import com.td.dgvlm.api.mapper.TransactionMapper;
-import com.td.dgvlm.api.model.TransactionResponse;
-import com.td.dgvlm.api.repository.StorTxnRepository;
-import com.td.dgvlm.api.entity.StorageTransaction;
-
-import jakarta.persistence.EntityNotFoundException;
-
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-
+@Component
 @Slf4j
-@Service
 @RequiredArgsConstructor
-public class TransactionStatusService {
+public class ClientAuthConfigurationLoader {
 
-    private final StorTxnRepository txnRepo;
-    private final TransactionMapper mapper;
+    private final ClientAuthConfigurationService clientAuthConfigurationService;
 
-    public TransactionResponse getTransactionStatus(String txnId) {
+    private final Map<String, Set<String>> clientIdMapping = new ConcurrentHashMap<>();
 
-        if (!StringUtils.hasText(txnId)) {
-            log.warn("Empty or null txnId received");
-            throw new IllegalArgumentException("Transaction ID must not be empty");
+    public enum Text {
+        CLIENT_ID,
+        LOB_ID,
+        MISSING_CLIENT_ID,
+        MISSING_BOTH
+    }
+
+    @PostConstruct
+    public void init() {
+        List<ClientAuthConfigurationDto> configurations =
+                clientAuthConfigurationService.fetchAllData();
+
+        for (ClientAuthConfigurationDto config : configurations) {
+            clientIdMapping
+                    .computeIfAbsent(config.getClientId(), k -> new HashSet<>())
+                    .add(config.getLob());
         }
 
-        log.debug("Fetching transaction status for txnId={}", txnId);
+        log.info("Loaded ClientAuth configuration for {} clients", clientIdMapping.size());
+    }
 
-        StorageTransaction entity = txnRepo.findByTxnId(txnId)
-                .orElseThrow(() -> {
-                    log.warn("Transaction not found for txnId={}", txnId);
-                    return new EntityNotFoundException(
-                            "Transaction not found for transactionId: " + txnId
-                    );
-                });
+    /**
+     * Validates whether clientId + lobId is configured.
+     * Returns normally if valid, throws exception otherwise.
+     */
+    public void validateClientAppConfigured(String clientId, String lobId)
+            throws DgvlmServiceException {
 
-        return mapper.toResponse(entity);
+        if (!StringUtils.hasText(clientId) && !StringUtils.hasText(lobId)) {
+            throwException(null, Text.MISSING_BOTH);
+        }
+
+        if (!StringUtils.hasText(clientId)) {
+            throwException(null, Text.MISSING_CLIENT_ID);
+        }
+
+        if (!StringUtils.hasText(lobId)) {
+            throwException(clientId, Text.LOB_ID);
+        }
+
+        Set<String> lobs = clientIdMapping.get(clientId);
+        if (lobs == null || !lobs.contains(lobId)) {
+            throwException(clientId + " and Lob ID: " + lobId, Text.MISSING_BOTH);
+        }
+    }
+
+    private void throwException(String value, Text text) throws DgvlmServiceException {
+        Status status;
+
+        switch (text) {
+            case CLIENT_ID -> {
+                status = new Status(
+                        String.valueOf(HttpStatus.UNAUTHORIZED.value()),
+                        Severity.Error
+                );
+                throw new DgvlmServiceException(
+                        status,
+                        "ClientId is not configured: " + value
+                );
+            }
+
+            case LOB_ID -> {
+                status = new Status(
+                        String.valueOf(HttpStatus.BAD_REQUEST.value()),
+                        Severity.Error
+                );
+                throw new DgvlmServiceException(
+                        status,
+                        "Lob ID is required."
+                );
+            }
+
+            case MISSING_CLIENT_ID -> {
+                status = new Status(
+                        String.valueOf(HttpStatus.BAD_REQUEST.value()),
+                        Severity.Error
+                );
+                throw new DgvlmServiceException(
+                        status,
+                        "Client ID is required."
+                );
+            }
+
+            default -> {
+                status = new Status(
+                        String.valueOf(HttpStatus.UNAUTHORIZED.value()),
+                        Severity.Error
+                );
+                throw new DgvlmServiceException(
+                        status,
+                        "Client Application is not configured for the given Client ID: " + value
+                );
+            }
+        }
     }
 }
