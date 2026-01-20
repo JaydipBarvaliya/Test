@@ -1,12 +1,11 @@
-public void validateClientApp(Optional<NativeWebRequest> requestOpt, String lobId) throws DgvlmServiceException {
-    HttpHeaders headers = new HttpHeaders();
+@Override
+public ResponseEntity<TransactionResponse> getTransactionStatus(String txnId, String lobId, String traceabilityID) {
+    String auth = getRequest()
+            .map(r -> r.getHeader(HttpHeaders.AUTHORIZATION))
+            .orElse(null);
 
-    requestOpt.ifPresent(req -> {
-        String auth = req.getHeader(HttpHeaders.AUTHORIZATION);
-        if (auth != null && !auth.isBlank()) {
-            headers.set(HttpHeaders.AUTHORIZATION, auth);
-        }
-    });
+    clientFieldValidatorUtil.validateClientApp(auth, lobId);
 
-    validateClients(headers, lobId);
+    TransactionResponse response = transService.getTransactionStatus(txnId);
+    return ResponseEntity.ok(response);
 }
