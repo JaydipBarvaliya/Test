@@ -1,9 +1,7 @@
-private List<ConfigurationDto> toDtos(List<Configuration> entities) {
-    if (CollectionUtils.isEmpty(entities)) {
-        return List.of();
+private String extractBearerToken(HttpHeaders headers) {
+    String authHeader = headers.getFirst(HttpHeaders.AUTHORIZATION);
+    if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
+        throw new DgvlmServiceException("Invalid Authorization header");
     }
-
-    return entities.stream()
-            .map(EntityToDTOMapper.INSTANCE::toDto)
-            .toList();
+    return authHeader.substring(7);
 }
