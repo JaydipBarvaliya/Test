@@ -1,7 +1,10 @@
-private String extractBearerToken(HttpHeaders headers) {
-    String authHeader = headers.getFirst(HttpHeaders.AUTHORIZATION);
-    if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
-        throw new DgvlmServiceException("Invalid Authorization header");
+private AccessTokenClaims resolveClaims(HttpHeaders headers) {
+    String token = extractBearerToken(headers);
+
+    if (!jwtSecured) {
+        log.warn("JWT signature validation disabled");
+        return OAuthValidator.getDecodedClaimsWithoutValidation(token);
     }
-    return authHeader.substring(7);
+
+    return OAuthValidator.getValidToken(token);
 }
