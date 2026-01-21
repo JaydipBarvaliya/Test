@@ -1,12 +1,9 @@
-public void validateClientApp(Optional<NativeWebRequest> requestOpt, String lobId) throws DgvlmServiceException {
-    HttpHeaders headers = new HttpHeaders();
-
-    requestOpt.ifPresent(req -> {
-        String auth = req.getHeader(HttpHeaders.AUTHORIZATION);
-        if (auth != null && !auth.isBlank()) {
-            headers.set(HttpHeaders.AUTHORIZATION, auth);
-        }
-    });
-
-    validateClients(headers, lobId);
+public static String sanitizeForLog(String input) {
+    if (input == null) {
+        return null;
+    }
+    return input
+        .replace("\n", "_")
+        .replace("\r", "_")
+        .replace("\t", "_");
 }
