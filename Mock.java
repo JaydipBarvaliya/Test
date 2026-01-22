@@ -1,9 +1,1 @@
-public static String sanitizeForLog(String input) {
-    if (input == null) {
-        return null;
-    }
-    return input
-        .replace("\n", "_")
-        .replace("\r", "_")
-        .replace("\t", "_");
-}
+nhu#H83ENz&2mf
