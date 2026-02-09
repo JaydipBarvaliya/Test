@@ -1,1 +1,4 @@
-https://youtube.com/shorts/zBSUpSNGrZA?si=fWnEj3ie2ByeVLdL
+@Cacheable(
+    value = "token",
+    key = "#apiName.name() + ':' + #lobId"
+)
