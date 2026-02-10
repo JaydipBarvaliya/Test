@@ -1,16 +1,7 @@
-Optional<StorageConfig> refinedConfig =
-        storageConfigRepo.findByLobIdAndStorageSystemAndRepoId(
-                lobId,
-                storageSystem,
-                repoId
-        );
+public final class CustomHttpHeaders {
 
-if (refinedConfig.isEmpty()) {
-    log.error(
-        "No StoreConfig found for lobId={}, storageSystem={}, repoId={}",
-        lobId, storageSystem, repoId
-    );
-    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+    private CustomHttpHeaders() {}
+
+    public static final String TRACEABILITY_ID = "TraceabilityId";
+    public static final String X_SECONDARY_AUTH = "X-Secondary-Auth";
 }
-
-selectedConfig = refinedConfig.get();
