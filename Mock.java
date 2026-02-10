@@ -1,4 +1,1 @@
-@Cacheable(
-    value = "token",
-    key = "#apiName.name() + ':' + #lobId"
-)
+125665FRD353532472
