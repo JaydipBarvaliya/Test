@@ -1,22 +1,16 @@
-@Override
-public long expireAfterCreate(Object key, Object value, long currentTime) {
+GRANT SELECT ON STOR_CONFIG TO DGVL_SS;
+GRANT SELECT ON STOR_TXN TO DGVL_SS;
+GRANT SELECT ON STOR_INGEST_TXN TO DGVL_SS;
 
-    // value is String (JWT)
-    String token = (String) value;
 
-    DecodedJWT jwt = JWT.decode(token);
+CREATE TABLE STOR_CONFIG AS
+SELECT * FROM DGVL_SS_DEV.STOR_CONFIG;
 
-    long expSeconds = jwt.getExpiresAt().getTime(); // millis
-    long nowMillis = System.currentTimeMillis();
+CREATE TABLE STOR_TXN AS
+SELECT * FROM DGVL_SS_DEV.STOR_TXN;
 
-    long ttlMillis = expSeconds - nowMillis;
+CREATE TABLE STOR_INGEST_TXN AS
+SELECT * FROM DGVL_SS_DEV.STOR_INGEST_TXN;
 
-    // subtract safety buffer
-    ttlMillis -= TimeUnit.SECONDS.toMillis(gracePeriodInSeconds);
 
-    if (ttlMillis <= 0) {
-        return 0L;
-    }
 
-    return TimeUnit.MILLISECONDS.toNanos(ttlMillis);
-}
