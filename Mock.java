@@ -1,44 +1,42 @@
-@ExtendWith(MockitoExtension.class)
-class PingFedServiceTest {
+@Test
+void shouldReturnToken_whenValidAndNotExpired() throws Exception {
 
-    @Mock
-    private OAuthSDKService oAuthSDKService;
+    OAuthRequest mockRequest = mock(OAuthRequest.class);
+    OAuthResponse mockResponse = mock(OAuthResponse.class);
 
-    @InjectMocks
-    private PingFedService pingFedService;
+    OAuthRequestBuilder.ClientCredentialsRequest clientCredStage =
+            mock(OAuthRequestBuilder.ClientCredentialsRequest.class);
 
-    @Test
-    void shouldReturnToken_whenValidAndNotExpired() throws Exception {
+    try (MockedConstruction<OAuthRequestBuilder> mocked =
+                 mockConstruction(OAuthRequestBuilder.class,
+                         (builderMock, context) -> {
 
-        OAuthRequest mockRequest = mock(OAuthRequest.class);
-        OAuthResponse mockResponse = mock(OAuthResponse.class);
+                             when(builderMock.withClientCredentialsRequest())
+                                     .thenReturn(clientCredStage);
 
-        try (MockedConstruction<OAuthRequestBuilder> mocked =
-                     mockConstruction(OAuthRequestBuilder.class,
-                             (mock, context) -> {
+                             when(clientCredStage.endClientCredentialsRequest())
+                                     .thenReturn(builderMock);
 
-                                 when(mock.withClientCredentialsRequest()).thenReturn(mock);
-                                 when(mock.endClientCredentialsRequest()).thenReturn(mock);
-                                 when(mock.build()).thenReturn(mockRequest);
-                             })) {
+                             when(builderMock.build())
+                                     .thenReturn(mockRequest);
+                         })) {
 
-            when(oAuthSDKService.getToken(mockRequest))
-                    .thenReturn(mockResponse);
+        when(oAuthSDKService.getToken(mockRequest))
+                .thenReturn(mockResponse);
 
-            when(mockResponse.getAccessToken())
-                    .thenReturn("test-token");
+        when(mockResponse.getAccessToken())
+                .thenReturn("test-token");
 
-            try (MockedStatic<OAuthValidator> validatorMock =
-                         mockStatic(OAuthValidator.class)) {
+        try (MockedStatic<OAuthValidator> validatorMock =
+                     mockStatic(OAuthValidator.class)) {
 
-                validatorMock.when(() ->
-                        OAuthValidator.isExpired("test-token"))
-                        .thenReturn(false);
+            validatorMock.when(() ->
+                    OAuthValidator.isExpired("test-token"))
+                    .thenReturn(false);
 
-                String result = pingFedService.getOauth2ClientToken();
+            String result = pingFedService.getOauth2ClientToken();
 
-                assertEquals("test-token", result);
-            }
+            assertEquals("test-token", result);
         }
     }
 }
