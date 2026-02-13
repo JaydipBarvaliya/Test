@@ -1,42 +1,9 @@
-@Test
-void shouldReturnToken_whenValidAndNotExpired() throws Exception {
+String fileName = txn.getDgvLFileName();
+String extension = ".pdf";
 
-    OAuthRequest mockRequest = mock(OAuthRequest.class);
-    OAuthResponse mockResponse = mock(OAuthResponse.class);
-
-    OAuthRequestBuilder.ClientCredentialsRequest clientCredStage =
-            mock(OAuthRequestBuilder.ClientCredentialsRequest.class);
-
-    try (MockedConstruction<OAuthRequestBuilder> mocked =
-                 mockConstruction(OAuthRequestBuilder.class,
-                         (builderMock, context) -> {
-
-                             when(builderMock.withClientCredentialsRequest())
-                                     .thenReturn(clientCredStage);
-
-                             when(clientCredStage.endClientCredentialsRequest())
-                                     .thenReturn(builderMock);
-
-                             when(builderMock.build())
-                                     .thenReturn(mockRequest);
-                         })) {
-
-        when(oAuthSDKService.getToken(mockRequest))
-                .thenReturn(mockResponse);
-
-        when(mockResponse.getAccessToken())
-                .thenReturn("test-token");
-
-        try (MockedStatic<OAuthValidator> validatorMock =
-                     mockStatic(OAuthValidator.class)) {
-
-            validatorMock.when(() ->
-                    OAuthValidator.isExpired("test-token"))
-                    .thenReturn(false);
-
-            String result = pingFedService.getOauth2ClientToken();
-
-            assertEquals("test-token", result);
-        }
+if (fileName != null && fileName.contains(".")) {
+    int dotIndex = fileName.lastIndexOf(".");
+    if (dotIndex > 0 && dotIndex < fileName.length() - 1) {
+        extension = fileName.substring(dotIndex);
     }
 }
