@@ -1,3 +1,26 @@
+@Modifying
+@Transactional
+@Query("""
+    UPDATE StorageIngestTransaction t
+       SET t.status = :status,
+           t.state = :state,
+           t.lastUpdateDttm = :lastUpdateDttm
+     WHERE t.ingestTxnId = :ingestTxnId
+""")
+void updateStatusAndState(
+        @Param("ingestTxnId") String ingestTxnId,
+        @Param("status") TxnStatus status,
+        @Param("state") TxnState state,
+        @Param("lastUpdateDttm") OffsetDateTime lastUpdateDttm
+);
+
+
+
+
+
+
+
+
 @Repository
 public interface StorTxnRepository extends JpaRepository<StorTxn, String> {
 
