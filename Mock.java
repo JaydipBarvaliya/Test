@@ -1,65 +1,55 @@
-ALTER TABLE STOR_INGEST_TXN 
-ADD CONFIG_ID NUMBER;
+private StorConfig resolveStorConfig(String lobId, IngestRequest ingestRequest) {
 
-ALTER TABLE STOR_INGEST_TXN
-ADD CONSTRAINT FK_TXN_CONFIG
-FOREIGN KEY (CONFIG_ID)
-REFERENCES STOR_CONFIG (CONFIG_ID);
+    List<StorConfig> storConfigs = storConfigRepo.findByLobId(lobId);
 
+    if (storConfigs == null || storConfigs.isEmpty()) {
+        log.warn("Invalid LOB ID received: {}", lobId);
+        return null;
+    }
 
-@Entity
-@Table(name = "STOR_CONFIG",
-       uniqueConstraints = {
-           @UniqueConstraint(
-               name = "UK_STOR_CONFIG_BUSINESS",
-               columnNames = {"LOB_ID", "STOR_SYS", "REPO_ID"}
-           )
-       })
-public class StoreConfig {
+    if (storConfigs.size() == 1) {
+        return storConfigs.get(0);
+    }
 
-    @Id
-    @Column(name = "CONFIG_ID")
-    private Long configId;
+    // Multiple configs found → resolve by storageSystem + repoId
+    String storageSystem = ingestRequest.getStorage().getStorageSystem();
+    String repoId = ingestRequest.getStorage().getRepoId();
 
-    @Column(name = "LOB_ID")
-    private String lobId;
+    Optional<StorConfig> storageConfig =
+            storConfigRepo.findByLobIdAndStorageSystemAndRepoId(
+                    lobId,
+                    storageSystem,
+                    repoId
+            );
 
-    @Column(name = "STOR_SYS")
-    private String storSys;
+    if (storageConfig.isEmpty()) {
+        log.error("No StoreConfig found for lobId={}, storageSystem={}, repoId={}",
+                lobId, storageSystem, repoId);
+        return null;
+    }
 
-    @Column(name = "REPO_ID")
-    private String repoId;
-
-    // optional: reverse mapping
-    @OneToMany(mappedBy = "config")
-    private List<StorageIngestTransaction> transactions;
+    return storageConfig.get();
 }
 
 
-@Id
-@GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "stor_config_seq")
-@SequenceGenerator(
-    name = "stor_config_seq",
-    sequenceName = "STOR_CONFIG_SEQ",
-    allocationSize = 1
-)
-private Long configId;
+@Override
+public ResponseEntity<Ingest200Response> ingest(String lobId,
+                                                String traceabilityID,
+                                                IngestRequest ingestRequest) {
 
+    log.info("IngestApiDelegateImpl.ingest()");
 
+    String primaryToken = clientFieldValidatorUtil
+            .validateClientAppAndExtractPrimaryToken(getRequest(), lobId);
 
+    StorConfig selectedConfig = resolveStorConfig(lobId, ingestRequest);
 
+    if (selectedConfig == null) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
-@ManyToOne(fetch = FetchType.LAZY)
-@JoinColumn(name = "CONFIG_ID", nullable = false)
-private StoreConfig config;
-
-
-Optional<StoreConfig> findByLobIdAndStorSysAndRepoId(
-    String lobId,
-    String storSys,
-    String repoId
-);
-
+    // continue your existing logic here...
+}
 
 
 
