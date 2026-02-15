@@ -1,88 +1,83 @@
-@Slf4j
-@Component
-@RequiredArgsConstructor
-public class BatchDocRetryScheduler {
+ALTER TABLE STOR_CONFIG
+DROP CONSTRAINT <existing_pk>;
 
-    private final RetryClaimService claimService;
-    private final BatchDocRetryService retryService;
+ALTER TABLE STOR_CONFIG
+ADD CONSTRAINT PK_STOR_CONFIG
+PRIMARY KEY (LOB_ID, STOR_SYS, REPO_ID);
 
-    private static final int BATCH_SIZE = 50;
 
-    @Scheduled(cron = "0 */1 * * * *")
-    public void retryScheduler() {
 
-        List<String> claimedIds =
-                claimService.claimErrorTransactions(BATCH_SIZE);
+ALTER TABLE STOR_INGEST_TXN
+ADD (
+    STOR_SYS VARCHAR2(50) NOT NULL,
+    REPO_ID VARCHAR2(50) NOT NULL
+);
 
-        if (claimedIds.isEmpty()) {
-            log.debug("No ERROR transactions found.");
-            return;
-        }
+ALTER TABLE STOR_INGEST_TXN
+ADD CONSTRAINT FK_TXN_CONFIG
+FOREIGN KEY (LOB_ID, STOR_SYS, REPO_ID)
+REFERENCES STOR_CONFIG (LOB_ID, STOR_SYS, REPO_ID);
 
-        log.info("Claimed {} transactions", claimedIds.size());
 
-        for (String txnId : claimedIds) {
-            retryService.process(txnId);
-        }
-    }
+
+
+@Embeddable
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class StorageConfigId implements Serializable {
+
+    @Column(name = "LOB_ID")
+    private String lobId;
+
+    @Column(name = "STOR_SYS")
+    private String storageSystem;
+
+    @Column(name = "REPO_ID")
+    private String repoId;
 }
 
 
 
-@Service
-@RequiredArgsConstructor
-@Slf4j
-public class BatchDocRetryService {
 
-    private final StorTxnRepository repo;
-    private final BatchDocService batchDocService; // your existing service
+@Entity
+@Table(name = "STOR_CONFIG")
+@Data
+@NoArgsConstructor
+public class StorageConfig {
 
-    private static final int MAX_RETRIES = 5;
+    @EmbeddedId
+    private StorageConfigId id;
 
-    @Transactional
-    public void process(String txnId) {
+    @Column(name = "FOLDER_PATH", nullable = false)
+    private String folderPath;
 
-        Optional<StorageIngestTransaction> optionalTxn =
-                repo.findByIngestTxnId(txnId);
+    @Column(name = "NAS_HOST")
+    private String nasHost;
 
-        if (optionalTxn.isEmpty()) {
-            log.warn("Transaction not found: {}", txnId);
-            return;
-        }
+    @Column(name = "NAS_USER")
+    private String nasUser;
 
-        StorageIngestTransaction txn = optionalTxn.get();
+    @Column(name = "NAS_PASS")
+    private String nasPass;
 
-        try {
-            // 🔥 Call existing logic
-            batchDocService.triggerBatchDocAPIAsync(txn);
-
-            // On success:
-            txn.setState(TxnState.FN_BATCH_TRIGGERED);
-            txn.setStatus(TxnStatus.ACTIVE);
-            txn.setLastUpdateDttm(OffsetDateTime.now());
-
-            repo.save(txn);
-
-        } catch (Exception ex) {
-
-            log.error("Retry failed for txnId={}", txnId, ex);
-
-            int newRetryCount = txn.getRetryCount() + 1;
-            txn.setRetryCount(newRetryCount);
-
-            if (newRetryCount >= MAX_RETRIES) {
-                txn.setStatus(TxnStatus.FAILURE);
-            } else {
-                txn.setStatus(TxnStatus.ERROR);
-            }
-
-            txn.setLastUpdateDttm(OffsetDateTime.now());
-
-            repo.save(txn);
-        }
-    }
+    @OneToMany(mappedBy = "storageConfig")
+    private List<StorageIngestTransaction> transactions;
 }
 
+
+
+@ManyToOne(fetch = FetchType.LAZY)
+@JoinColumns({
+    @JoinColumn(name = "LOB_ID", referencedColumnName = "LOB_ID"),
+    @JoinColumn(name = "STOR_SYS", referencedColumnName = "STOR_SYS"),
+    @JoinColumn(name = "REPO_ID", referencedColumnName = "REPO_ID")
+})
+private StorageConfig storageConfig;
+
+
+
+StorageConfig config = txn.getStorageConfig();
 
 
 
