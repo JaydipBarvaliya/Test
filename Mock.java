@@ -1,103 +1,122 @@
+Good. 👍 You’re not far off. You just mixed sequence names and constraints. Let’s clean this properly.
 
-CREATE SEQUENCE STOR_CONFIG_SEQ
-START WITH 1
+From your screenshot:
+
+ALTER TABLE STOR_CONFIG ADD CONFIG_ID NUMBER;
+
+CREATE SEQUENCE STOR_CONFIG_SEQ START WITH 1
 INCREMENT BY 1
 NOCACHE
 NOCYCLE;
 
+UPDATE STOR_CONFIG SET CONFIG_ID = STOR_CONFIG_SEQ.NEXTVAL;
+
+The ORA-00933 error is likely because:
+
+• You already created the sequence earlier
+• Or you executed partially
+• Or missing semicolon between statements
+• Or ran all together in worksheet incorrectly
+
+Let’s fix this cleanly step-by-step.
+
+⸻
+
+✅ Step 1 — Check What Exists First
+
+Run:
+
+SELECT sequence_name FROM user_sequences WHERE sequence_name = 'STOR_CONFIG_SEQ';
+
+If it exists → do NOT recreate it.
+
+If it does not exist → create it.
+
+⸻
+
+✅ Step 2 — If Sequence Exists, Just Populate IDs
+
+If CONFIG_ID column exists but values are NULL:
 
 UPDATE STOR_CONFIG
-SET CONFIG_ID = STOR_CONFIG_SEQ.NEXTVAL;
+SET CONFIG_ID = STOR_CONFIG_SEQ.NEXTVAL
+WHERE CONFIG_ID IS NULL;
 
+Commit:
 
 COMMIT;
 
 
+⸻
 
+✅ Step 3 — Make CONFIG_ID NOT NULL
 
-
+Only after values are filled:
 
 ALTER TABLE STOR_CONFIG
-DROP CONSTRAINT <existing_pk>;
+MODIFY CONFIG_ID NOT NULL;
+
+
+⸻
+
+✅ Step 4 — Make CONFIG_ID Primary Key
+
+If you still have composite PK, drop it:
+
+ALTER TABLE STOR_CONFIG DROP CONSTRAINT PK_STOR_CONFIG;
+
+Then:
 
 ALTER TABLE STOR_CONFIG
-ADD CONSTRAINT PK_STOR_CONFIG
-PRIMARY KEY (LOB_ID, STOR_SYS, REPO_ID);
+ADD CONSTRAINT PK_STOR_CONFIG PRIMARY KEY (CONFIG_ID);
 
 
+⸻
 
-ALTER TABLE STOR_INGEST_TXN
-ADD (
-    STOR_SYS VARCHAR2(50) NOT NULL,
-    REPO_ID VARCHAR2(50) NOT NULL
-);
+✅ Step 5 — Re-add Business Unique Constraint
 
-ALTER TABLE STOR_INGEST_TXN
-ADD CONSTRAINT FK_TXN_CONFIG
-FOREIGN KEY (LOB_ID, STOR_SYS, REPO_ID)
-REFERENCES STOR_CONFIG (LOB_ID, STOR_SYS, REPO_ID);
+Very important:
+
+ALTER TABLE STOR_CONFIG
+ADD CONSTRAINT UK_STOR_CONFIG_BUSINESS
+UNIQUE (LOB_ID, STOR_SYS, REPO_ID);
 
 
+⸻
 
+⚠ Why You Got ORA-00001 Earlier
 
-@Embeddable
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class StorageConfigId implements Serializable {
+From your earlier screenshot:
 
-    @Column(name = "LOB_ID")
-    private String lobId;
+ORA-00001: unique constraint (PK_STOR_CONFIG) violated
 
-    @Column(name = "STOR_SYS")
-    private String storageSystem;
+That means:
 
-    @Column(name = "REPO_ID")
-    private String repoId;
-}
+You already had a primary key on CONFIG_ID and you tried inserting duplicate values manually.
 
+Let the sequence generate it automatically.
 
+Do NOT manually insert CONFIG_ID values unless you know what you’re doing.
 
+⸻
 
-@Entity
-@Table(name = "STOR_CONFIG")
-@Data
-@NoArgsConstructor
-public class StorageConfig {
+🎯 Clean State You Should Have
 
-    @EmbeddedId
-    private StorageConfigId id;
+STOR_CONFIG table:
+	•	CONFIG_ID (PK)
+	•	LOB_ID
+	•	STOR_SYS
+	•	REPO_ID
+	•	UNIQUE(LOB_ID, STOR_SYS, REPO_ID)
 
-    @Column(name = "FOLDER_PATH", nullable = false)
-    private String folderPath;
+That’s correct architecture.
 
-    @Column(name = "NAS_HOST")
-    private String nasHost;
+⸻
 
-    @Column(name = "NAS_USER")
-    private String nasUser;
+Now next logical step:
 
-    @Column(name = "NAS_PASS")
-    private String nasPass;
+Add CONFIG_ID as foreign key to STOR_INGEST_TXN.
 
-    @OneToMany(mappedBy = "storageConfig")
-    private List<StorageIngestTransaction> transactions;
-}
+If you’re ready, I’ll give you that exact safe migration script.
 
-
-
-@ManyToOne(fetch = FetchType.LAZY)
-@JoinColumns({
-    @JoinColumn(name = "LOB_ID", referencedColumnName = "LOB_ID"),
-    @JoinColumn(name = "STOR_SYS", referencedColumnName = "STOR_SYS"),
-    @JoinColumn(name = "REPO_ID", referencedColumnName = "REPO_ID")
-})
-private StorageConfig storageConfig;
-
-
-
-StorageConfig config = txn.getStorageConfig();
-
-
-
-
+You’re doing the right thing. Just slow down and execute cleanly. 💪
