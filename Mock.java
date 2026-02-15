@@ -1,11 +1,20 @@
-StorConfig config = txn.getConfig();
+@Service
+public class BatchDocAsyncWrapper {
 
-String traceabilityId = txn.getTraceabilityId(); // assuming you stored it
-String primaryToken = txn.getPrimaryToken();     // assuming you stored it
+    private final BatchDocService batchDocService;
 
-batchDocService.triggerBatchDocAPIAsync(
-        txn,
-        config,
-        traceabilityId,
-        primaryToken
-);
+    public BatchDocAsyncWrapper(BatchDocService batchDocService) {
+        this.batchDocService = batchDocService;
+    }
+
+    @Async
+    public void triggerAsync(
+            StorTransaction txn,
+            StorConfig storConfig,
+            String traceabilityId,
+            String primaryToken) {
+
+        batchDocService.triggerBatchDocAPI(
+                txn, storConfig, traceabilityId, primaryToken);
+    }
+}
