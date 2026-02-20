@@ -1,9 +1,16 @@
+sudo mkdir -p /opt/scripts
+sudo mv mount-dgvlm-test.sh /opt/scripts/
+sudo chmod 750 /opt/scripts/mount-dgvlm-test.sh
+
+
+
+
+
 #!/bin/bash
 
 # ==========================================================
-# Script Name : mount-dgvlm-test.sh
-# Purpose     : Install cifs-utils and mount DGVLM NAS
-# WARNING     : Hardcoded password for testing ONLY
+# Script: mount-dgvlm.sh
+# Purpose: Mount NAS using decrypted secret
 # ==========================================================
 
 set -e
@@ -14,75 +21,69 @@ set -e
 
 NAS_SERVER="//NSAPDVCS01.D2-TDBFG.COM/SRCHD_0027D"
 MOUNT_POINT="/mnt/dgvlm-nas"
-
-USERNAME="TDGVLM942NASB"
-PASSWORD="PUT_REAL_PASSWORD_HERE"
 DOMAIN="D2-TDBFG"
 
 APP_USER="springboot"
 APP_GROUP="springboot"
 
-echo "Starting NAS mount test..."
+ENCRYPTED_FILE="/opt/springboot/security/encrypted_json.enc"
+PRIVATE_KEY="/etc/pki/TD_SPRINGBOOT/private-key.pem"
+
+echo "Starting NAS mount process..."
 
 # -----------------------------
 # STEP 1: Install cifs-utils
 # -----------------------------
 
-echo "Installing cifs-utils..."
-sudo yum install -y cifs-utils
-
-# Verify installation
 if ! command -v mount.cifs &> /dev/null; then
-    echo "ERROR: cifs-utils installation failed."
+    sudo yum install -y cifs-utils
+fi
+
+# -----------------------------
+# STEP 2: Decrypt NAS password
+# -----------------------------
+
+echo "Decrypting NAS password..."
+
+NAS_PASSWORD=$(openssl smime -decrypt \
+    -in "$ENCRYPTED_FILE" \
+    -binary -inform DEM \
+    -inkey "$PRIVATE_KEY" | \
+    jq -r '["local"]["secrets:naspassword"]')
+
+if [ -z "$NAS_PASSWORD" ]; then
+    echo "ERROR: Failed to retrieve NAS password."
     exit 1
 fi
 
-echo "cifs-utils installed successfully."
-
 # -----------------------------
-# STEP 2: Create mount directory
+# STEP 3: Create mount directory
 # -----------------------------
 
 if [ ! -d "$MOUNT_POINT" ]; then
-    echo "Creating mount directory at $MOUNT_POINT"
     sudo mkdir -p "$MOUNT_POINT"
     sudo chown $APP_USER:$APP_GROUP "$MOUNT_POINT"
     sudo chmod 775 "$MOUNT_POINT"
 fi
 
 # -----------------------------
-# STEP 3: Unmount if already mounted
+# STEP 4: Mount
 # -----------------------------
 
 if mount | grep -q "$MOUNT_POINT"; then
-    echo "Already mounted. Unmounting first..."
-    sudo umount "$MOUNT_POINT"
+    echo "Already mounted."
+    exit 0
 fi
 
-# -----------------------------
-# STEP 4: Mount NAS
-# -----------------------------
-
-echo "Attempting mount..."
+echo "Mounting NAS..."
 
 sudo mount -t cifs "$NAS_SERVER" "$MOUNT_POINT" \
-  -o username="$USERNAME",password="$PASSWORD",domain="$DOMAIN",uid=$APP_USER,gid=$APP_GROUP,file_mode=0775,dir_mode=0775,vers=3.0,nounix
+    -o username=TDGVLM942NASB,password="$NAS_PASSWORD",domain="$DOMAIN",uid=$APP_USER,gid=$APP_GROUP,vers=3.0,file_mode=0775,dir_mode=0775,nounix
+
+echo "NAS mounted successfully."
 
 # -----------------------------
-# STEP 5: Validate mount
+# STEP 5: Clear sensitive variable
 # -----------------------------
 
-if mount | grep -q "$MOUNT_POINT"; then
-    echo "======================================"
-    echo "SUCCESS: NAS mounted at $MOUNT_POINT"
-    echo "======================================"
-    ls -l "$MOUNT_POINT"
-else
-    echo "FAILED: NAS mount did not succeed."
-    exit 1
-fi
-
-sudo mkdir -p /opt/scripts
-sudo mv mount-dgvlm-test.sh /opt/scripts/
-sudo chmod 750 /opt/scripts/mount-dgvlm-test.sh
-
+unset NAS_PASSWORD
