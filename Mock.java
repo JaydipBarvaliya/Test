@@ -81,3 +81,8 @@ else
     echo "FAILED: NAS mount did not succeed."
     exit 1
 fi
+
+sudo mkdir -p /opt/scripts
+sudo mv mount-dgvlm-test.sh /opt/scripts/
+sudo chmod 750 /opt/scripts/mount-dgvlm-test.sh
+
