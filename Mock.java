@@ -2,7 +2,17 @@ sudo mkdir -p /opt/scripts
 sudo mv mount-dgvlm-test.sh /opt/scripts/
 sudo chmod 750 /opt/scripts/mount-dgvlm-test.sh
 
+Thanks for the clarification.
 
+That makes sense regarding the remount requirement after reboot or before app startup. I agree that relying purely on the script would require explicit execution unless we integrate it into startup.
+
+For the credential handling, I’ve updated the approach to align with the existing secret retrieval mechanism. Instead of hardcoding the NAS password, I’m decrypting it from the encrypted_json.enc using the same openssl + jq pattern that we currently use for DB secrets. The password is stored only in memory and cleared after mount.
+
+This keeps the implementation consistent with our current secret management pattern and avoids storing credentials in plain text.
+
+For other environments, I’m planning to parameterize the NAS path and rely on environment-specific encrypted_json files so each environment uses its own secret values.
+
+Let me know if you’d prefer we move this to an fstab-based mount instead of script-based startup integration.
 
 
 
