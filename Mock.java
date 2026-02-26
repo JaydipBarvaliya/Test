@@ -1,35 +1,45 @@
-// Step 1: Lock a batch of rows that are in ERROR state.
-//
-// We use "FOR UPDATE SKIP LOCKED" so that if multiple schedulers
-// run at the same time (maybe on different JVMs), they do not
-// pick the same rows.
-//
-// The lock makes sure that once this scheduler selects these rows,
-// no other scheduler can select them at the same time.
+package com.td.dgvlm.api.service;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-List<String> ids = repo.lockErrorTransactions()
-        .stream()
-        .limit(batchSize)
-        .toList();
+import java.util.List;
 
-if (!ids.isEmpty()) {
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class RetryClaimService {
 
-    // Step 2: Change status from ERROR -> ACTIVE.
-    //
-    // The lock is temporary and will be released when this
-    // transaction finishes (commit).
-    //
-    // If we do not change the status, then after the lock is released,
-    // another scheduler can pick the same rows again because they
-    // are still in ERROR state.
-    //
-    // So:
-    // - Lock prevents two schedulers from picking the same row at the same time.
-    // - Changing status prevents the same row from being picked again later.
-    
-    repo.markActive(ids);
+    private final StorTxnRepository repo;
+
+    @Transactional
+    public List<String> claimErrorTransactions(int batchSize) {
+
+        log.info("Starting claimErrorTransactions. Batch size: {}", batchSize);
+
+        // Step 1: Lock ERROR rows safely using FOR UPDATE SKIP LOCKED
+        List<String> ids = repo.lockErrorTransactions()
+                .stream()
+                .limit(batchSize)
+                .toList();
+
+        if (ids.isEmpty()) {
+            log.info("No ERROR transactions available to claim.");
+            return ids;
+        }
+
+        log.info("Locked {} ERROR transactions: {}", ids.size(), ids);
+
+        // Step 2: Move ERROR -> ACTIVE so they are not re-selected
+        repo.markActive(ids);
+
+        log.info("Marked {} transactions as ACTIVE.", ids.size());
+
+        // Transaction commits automatically when method exits
+        log.info("Transaction committed. Returning claimed transaction IDs.");
+
+        return ids;
+    }
 }
-
-// Transaction commits here
-return ids;
