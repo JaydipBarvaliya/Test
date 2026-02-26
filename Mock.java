@@ -1,14 +1,35 @@
-// Step 1: Atomically claim a batch of ERROR transactions using
-// SELECT ... FOR UPDATE SKIP LOCKED.
+// Step 1: Lock a batch of rows that are in ERROR state.
 //
-// This ensures that if multiple scheduler instances (across JVMs)
-// run concurrently, they cannot select and process the same rows.
-// The lock guarantees exclusive ownership of these rows
-// within this transaction while we transition their state.
+// We use "FOR UPDATE SKIP LOCKED" so that if multiple schedulers
+// run at the same time (maybe on different JVMs), they do not
+// pick the same rows.
+//
+// The lock makes sure that once this scheduler selects these rows,
+// no other scheduler can select them at the same time.
 
 
+List<String> ids = repo.lockErrorTransactions()
+        .stream()
+        .limit(batchSize)
+        .toList();
 
+if (!ids.isEmpty()) {
 
-// We do NOT rely on row locks to protect long-running processing.
-// Locks are short-lived and only used to safely "claim" work.
-// The ACTIVE state represents a durable ownership marker.
+    // Step 2: Change status from ERROR -> ACTIVE.
+    //
+    // The lock is temporary and will be released when this
+    // transaction finishes (commit).
+    //
+    // If we do not change the status, then after the lock is released,
+    // another scheduler can pick the same rows again because they
+    // are still in ERROR state.
+    //
+    // So:
+    // - Lock prevents two schedulers from picking the same row at the same time.
+    // - Changing status prevents the same row from being picked again later.
+    
+    repo.markActive(ids);
+}
+
+// Transaction commits here
+return ids;
