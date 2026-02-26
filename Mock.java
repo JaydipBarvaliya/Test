@@ -1,5 +1,76 @@
--- Check FK
-SELECT constraint_name, status
-FROM user_constraints
-WHERE table_name = 'STOR_INGEST_TXN'
-AND constraint_type = 'R';
+/* =======================================================
+   REBUILD STOR_CONFIG WITH NEW COLUMN ORDER
+   DEV ENVIRONMENT ONLY
+   ======================================================= */
+
+-- 1️⃣ Drop Foreign Key from child table
+BEGIN
+    EXECUTE IMMEDIATE 'ALTER TABLE STOR_INGEST_TXN DROP CONSTRAINT FK_TXN_CONFIG';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -2443 THEN
+            RAISE;
+        END IF;
+END;
+/
+
+-- 2️⃣ Drop STOR_CONFIG table
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE STOR_CONFIG CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+
+-- 3️⃣ Drop Sequence (if exists)
+BEGIN
+    EXECUTE IMMEDIATE 'DROP SEQUENCE STOR_CONFIG_SEQ';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -2289 THEN -- sequence does not exist
+            RAISE;
+        END IF;
+END;
+/
+
+-- 4️⃣ Recreate STOR_CONFIG with correct column order
+CREATE TABLE STOR_CONFIG (
+    ID            NUMBER              NOT NULL,
+    LOB_ID        VARCHAR2(50 BYTE)   NOT NULL,
+    STOR_SYS      VARCHAR2(50 BYTE)   NOT NULL,
+    REPO_ID       VARCHAR2(50 BYTE)   NOT NULL,
+    FOLDER_PATH   VARCHAR2(50 BYTE)   NOT NULL,
+    NAS_LOCATION  VARCHAR2(50 BYTE)   NOT NULL
+);
+
+-- 5️⃣ Create Sequence
+CREATE SEQUENCE STOR_CONFIG_SEQ
+START WITH 1
+INCREMENT BY 1
+NOCACHE
+NOCYCLE;
+
+-- 6️⃣ Recreate Primary Key
+ALTER TABLE STOR_CONFIG
+ADD CONSTRAINT PK_STOR_CONFIG
+PRIMARY KEY (ID);
+
+-- 7️⃣ Recreate Unique Business Constraint
+ALTER TABLE STOR_CONFIG
+ADD CONSTRAINT UK_STOR_CONFIG_BUSINESS
+UNIQUE (LOB_ID, STOR_SYS, REPO_ID);
+
+-- 8️⃣ Recreate Foreign Key
+ALTER TABLE STOR_INGEST_TXN
+ADD CONSTRAINT FK_TXN_CONFIG
+FOREIGN KEY (STOR_CONFIG_ID)
+REFERENCES STOR_CONFIG (ID);
+
+-- 9️⃣ Verify column order
+SELECT column_name, column_id
+FROM user_tab_columns
+WHERE table_name = 'STOR_CONFIG'
+ORDER BY column_id;
