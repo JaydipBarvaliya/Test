@@ -1,1 +1,2 @@
-Shoutout to Michael for consistently being available as a point of contact for infra topics. Your responsiveness made this sprint smoother for everyone.
+@Value("#{'${application.id:dgvlmapi}'.split(',')}")
+private List<String> applicationIds;
