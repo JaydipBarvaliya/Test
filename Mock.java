@@ -1,31 +1,37 @@
-@Scheduled(cron = "*/5 * * * * *")
-public void retryScheduler() {
+@Async
+public void triggerAsync(StorTransaction txn,
+                         StorConfig storConfig,
+                         String traceabilityId) {
 
+    String txnId = txn.getIngestTxnId();
     long startTime = System.currentTimeMillis();
 
-    log.info("Retry scheduler started. Batch size: {}", batchSize);
+    log.info("Async BatchDoc trigger started for txnId={}", txnId);
 
-    List<String> claimedIds = claimService.claimErrorTransactions(batchSize);
+    try {
 
-    if (claimedIds.isEmpty()) {
-        log.debug("No ERROR transactions available in this cycle.");
-        return;
+        log.debug("Calling BatchDoc API for txnId={}, traceabilityId={}",
+                txnId, traceabilityId);
+
+        batchDocService.triggerBatchDocAPI(txn, storConfig, traceabilityId);
+
+        long duration = System.currentTimeMillis() - startTime;
+
+        log.info("Async BatchDoc trigger completed successfully for txnId={} in {} ms",
+                txnId, duration);
+
+    } catch (Exception ex) {
+
+        log.error("Async BatchDoc trigger FAILED for txnId={}. Updating status to ERROR/RECEIVED",
+                txnId, ex);
+
+        storTxnRepository.updateStatusAndState(
+                txnId,
+                TxnStatus.ERROR,
+                TxnState.RECEIVED,
+                OffsetDateTime.now()
+        );
+
+        log.info("Transaction {} marked as ERROR and RECEIVED for retry.", txnId);
     }
-
-    log.info("Claimed {} transactions for retry.", claimedIds.size());
-    log.debug("Claimed transaction IDs: {}", claimedIds);
-
-    for (String txnId : claimedIds) {
-        try {
-            log.debug("Processing retry for txnId={}", txnId);
-            retryService.process(txnId);
-            log.debug("Retry processing completed for txnId={}", txnId);
-        } catch (Exception ex) {
-            log.error("Scheduler-level failure while processing txnId={}", txnId, ex);
-        }
-    }
-
-    long duration = System.currentTimeMillis() - startTime;
-    log.info("Retry scheduler completed. Processed {} transactions in {} ms.",
-            claimedIds.size(), duration);
 }
