@@ -1,68 +1,148 @@
-@Transactional
-public void process(String ingestTxnId) {
+package com.td.dgvlm.api.service;
 
-    long startTime = System.currentTimeMillis();
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
-    log.debug("Retry processing started for ingestTxnId={}", ingestTxnId);
+import java.time.OffsetDateTime;
+import java.util.List;
 
-    Optional<StorTransaction> optionalTxn =
-            txnRepo.findByIngestTxnId(ingestTxnId);
+@Service
+@RequiredArgsConstructor
+public class BatchDocService {
 
-    if (optionalTxn.isEmpty()) {
-        log.warn("Retry skipped. Transaction {} does not exist or already processed.",
-                ingestTxnId);
-        return;
+    private static final Logger log =
+            LoggerFactory.getLogger(BatchDocService.class);
+
+    private final StorTxnRepository txnRepo;
+    private final WebClientGateway webClientGateway;
+    private final PingFedService pingFedService;
+
+    public void triggerBatchDocAPI(StorTransaction txn,
+                                   StorConfig storConfig,
+                                   String traceabilityId)
+            throws ApiConfigException, ApiException {
+
+        String txnId = txn.getIngestTxnId();
+        long startTime = System.currentTimeMillis();
+
+        log.info("BatchDoc API trigger started. txnId={}, repoId={}, folderPath={}",
+                txnId,
+                storConfig.getRepoId(),
+                storConfig.getFolderPath());
+
+        try {
+
+            BatchDocRequest batchdocReqPayload =
+                    buildBatchDocRequest(txn, storConfig);
+
+            log.debug("BatchDoc request built for txnId={}", txnId);
+
+            String pingfedToken =
+                    pingFedService.getOauth2ClientSecondaryToken();
+
+            log.debug("OAuth token obtained for txnId={}", txnId);
+
+            BatchDocResponse batchdocResp =
+                    webClientGateway.callBatchDocAPI(
+                            batchdocReqPayload,
+                            traceabilityId,
+                            pingfedToken
+                    );
+
+            log.info("BatchDoc API call successful. txnId={}, batchId={}",
+                    txnId,
+                    batchdocResp.batchId());
+
+            txn.setStorTxnId(batchdocResp.batchId());
+            txn.setStatus(TxnStatus.ACTIVE);
+            txn.setState(TxnState.FN_BATCH_TRIGGERED);
+            txn.setLastUpdateDttm(OffsetDateTime.now());
+
+            txnRepo.save(txn);
+
+            long duration = System.currentTimeMillis() - startTime;
+
+            log.info("Transaction updated after BatchDoc success. txnId={}, duration={} ms",
+                    txnId,
+                    duration);
+
+        } catch (Exception ex) {
+
+            log.error("BatchDoc API failed. txnId={}", txnId, ex);
+
+            throw ex; // propagate to caller (retry / async layer handles DB update)
+        }
     }
 
-    StorTransaction txn = optionalTxn.get();
+    private BatchDocRequest buildBatchDocRequest(StorTransaction txn,
+                                                 StorConfig storConfig) {
 
-    try {
+        log.debug("Building BatchDoc request for txnId={}, storeFileId={}",
+                txn.getIngestTxnId(),
+                txn.getStoreFileId());
 
-        log.debug("Triggering BatchDoc API for ingestTxnId={}, currentRetryCount={}",
-                ingestTxnId, txn.getRetryCount());
+        BatchDocSearchCriteria repoCriteria =
+                new BatchDocSearchCriteria();
 
-        batchDocService.triggerBatchDocAPI(
-                txn,
-                txn.getConfig(),
-                txn.getTraceabilityId()
+        repoCriteria.setKeyName("Id");
+        repoCriteria.setKeyValue(txn.getStoreFileId());
+
+        BatchDocOption outputFileBatchDocOption =
+                new BatchDocOption();
+
+        outputFileBatchDocOption.setKeyName("outputFileName");
+
+        String extension =
+                extractExtension(txn.getStoreFileId());
+
+        outputFileBatchDocOption.setKeyValue(
+                txn.getStoreFileId() + extension
         );
 
-        long duration = System.currentTimeMillis() - startTime;
+        BatchDocProcess process =
+                new BatchDocProcess();
 
-        log.info("Retry successful for ingestTxnId={} in {} ms",
-                ingestTxnId, duration);
+        process.setRepositorySearchCriteria(
+                List.of(repoCriteria)
+        );
 
-    } catch (Exception ex) {
+        process.setOption(
+                List.of(outputFileBatchDocOption)
+        );
 
-        log.error("Retry failed for ingestTxnId={}", ingestTxnId, ex);
+        log.debug("BatchDoc request prepared successfully for txnId={}",
+                txn.getIngestTxnId());
 
-        int newRetryCount = txn.getRetryCount() + 1;
-        txn.setRetryCount(newRetryCount);
+        return new BatchDocRequest(
+                storConfig.getRepoId(),
+                storConfig.getFolderPath(),
+                List.of(process)
+        );
+    }
 
-        if (newRetryCount >= failureRetryMax) {
+    private static String extractExtension(String fileName) {
 
-            txn.setStatus(TxnStatus.FAILURE);
+        String extension = ".pdf";
 
-            log.warn("Retry limit reached for ingestTxnId={}. Marked as FAILURE. retryCount={}",
-                    ingestTxnId, newRetryCount);
-
-        } else {
-
-            txn.setStatus(TxnStatus.ERROR);
-
-            log.info("Retry scheduled again for ingestTxnId={}. retryCount={}/{}",
-                    ingestTxnId, newRetryCount, failureRetryMax);
+        if (fileName == null || fileName.isBlank()) {
+            log.warn("File name is null or empty. Defaulting extension to .pdf");
+            return extension;
         }
 
-        txn.setLastUpdateDttm(OffsetDateTime.now());
-        txn.setState(TxnState.RECEIVED);
+        int dotIndex = fileName.lastIndexOf(".");
 
-        txnRepo.save(txn);
+        if (dotIndex > 0 && dotIndex < fileName.length() - 1) {
+            extension = fileName.substring(dotIndex);
+            log.debug("Extracted extension '{}' from fileName={}",
+                    extension,
+                    fileName);
+        } else {
+            log.debug("No extension found in fileName={}. Defaulting to .pdf",
+                    fileName);
+        }
 
-        log.debug("Transaction {} updated in DB with status={} state={} retryCount={}",
-                ingestTxnId,
-                txn.getStatus(),
-                txn.getState(),
-                txn.getRetryCount());
+        return extension;
     }
 }
