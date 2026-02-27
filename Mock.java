@@ -1,20 +1,28 @@
-catch (WebClientResponseException.NotFound ex) {
-    throw new DgvlmServiceException(
-            new Status(String.valueOf(HttpStatus.BAD_REQUEST.value()), Severity.Error),
-            "Drawer or Folder not found in DG"
-    );
-}
+public void validateDrawerAndFolder(
+        IngestRequest ingestRequest,
+        String traceabilityId) {
 
-catch (WebClientResponseException ex) {
-    throw new DgvlmServiceException(
-            new Status(String.valueOf(HttpStatus.SERVICE_UNAVAILABLE.value()), Severity.Error),
-            "DG returned error: " + ex.getStatusCode()
-    );
-}
+    String drawerId = ingestRequest.getDigitalVault().getDrawerId();
+    String folderId = ingestRequest.getDigitalVault().getFolderId();
+    String token = pingFedService.getOauth2ClientSecondaryToken();
 
-catch (Exception ex) {
-    throw new DgvlmServiceException(
-            new Status(String.valueOf(HttpStatus.SERVICE_UNAVAILABLE.value()), Severity.Error),
-            "DG system unavailable"
-    );
+    try {
+
+        webClientGateway.callDgvlToValidateDrawerIdOrFolderId(
+                drawerId,
+                folderId,
+                traceabilityId,
+                token
+        );
+
+    } catch (Exception ex) {
+
+        throw new DgvlmServiceException(
+                new Status(
+                        String.valueOf(HttpStatus.BAD_REQUEST.value()),
+                        Severity.Error
+                ),
+                "Drawer or Folder validation failed in DG"
+        );
+    }
 }
