@@ -1,148 +1,243 @@
-package com.td.dgvlm.api.service;
+Perfect. I’ll rewrite this properly structured, clean, and Confluence-ready so you can paste it directly into Jira/Confluence without editing.
 
-import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
+Below is a single complete documentation file.
 
-import java.time.OffsetDateTime;
-import java.util.List;
+⸻
 
-@Service
-@RequiredArgsConstructor
-public class BatchDocService {
+📘 DGVLM API – Specification & Certification Publication Process
 
-    private static final Logger log =
-            LoggerFactory.getLogger(BatchDocService.class);
+🎯 Objective
 
-    private final StorTxnRepository txnRepo;
-    private final WebClientGateway webClientGateway;
-    private final PingFedService pingFedService;
+This document describes the complete process to:
+	•	Publish API scope to Marketplace
+	•	Validate and release OpenAPI specifications
+	•	Run certification workflows via GitHub Actions
+	•	Ensure artifacts are correctly promoted to target repositories
 
-    public void triggerBatchDocAPI(StorTransaction txn,
-                                   StorConfig storConfig,
-                                   String traceabilityId)
-            throws ApiConfigException, ApiException {
+This process must be followed exactly to avoid spec version inconsistencies or certification failures.
 
-        String txnId = txn.getIngestTxnId();
-        long startTime = System.currentTimeMillis();
+⸻
 
-        log.info("BatchDoc API trigger started. txnId={}, repoId={}, folderPath={}",
-                txnId,
-                storConfig.getRepoId(),
-                storConfig.getFolderPath());
+1️⃣ Repository Details
 
-        try {
+Primary API Config Repository
 
-            BatchDocRequest batchdocReqPayload =
-                    buildBatchDocRequest(txn, storConfig);
+https://github.com/TD-Enterprise/dgvlm-api
 
-            log.debug("BatchDoc request built for txnId={}", txnId);
+Repository Type: Internal
+Generated From: TD-Enterprise/edp-template-repo
 
-            String pingfedToken =
-                    pingFedService.getOauth2ClientSecondaryToken();
+⸻
 
-            log.debug("OAuth token obtained for txnId={}", txnId);
+2️⃣ Branch Strategy
 
-            BatchDocResponse batchdocResp =
-                    webClientGateway.callBatchDocAPI(
-                            batchdocReqPayload,
-                            traceabilityId,
-                            pingfedToken
-                    );
+You must:
+	1.	Checkout main
+	2.	Create a new branch:
 
-            log.info("BatchDoc API call successful. txnId={}, batchId={}",
-                    txnId,
-                    batchdocResp.batchId());
+dgvlm-api
 
-            txn.setStorTxnId(batchdocResp.batchId());
-            txn.setStatus(TxnStatus.ACTIVE);
-            txn.setState(TxnState.FN_BATCH_TRIGGERED);
-            txn.setLastUpdateDttm(OffsetDateTime.now());
+OR use your feature-specific branch if applicable (e.g., aesig-api)
+	3.	Replace your OpenAPI spec file inside:
 
-            txnRepo.save(txn);
+certifications/
 
-            long duration = System.currentTimeMillis() - startTime;
+Example:
 
-            log.info("Transaction updated after BatchDoc success. txnId={}, duration={} ms",
-                    txnId,
-                    duration);
+api.esignatureevents.esignlive.json
+manifest_auto.json
 
-        } catch (Exception ex) {
+⚠ Ensure your spec file is correct before triggering workflows.
 
-            log.error("BatchDoc API failed. txnId={}", txnId, ex);
+⸻
 
-            throw ex; // propagate to caller (retry / async layer handles DB update)
-        }
-    }
+3️⃣ GitHub Workflows Execution Order
 
-    private BatchDocRequest buildBatchDocRequest(StorTransaction txn,
-                                                 StorConfig storConfig) {
+All workflows must be executed in the exact sequence below.
 
-        log.debug("Building BatchDoc request for txnId={}, storeFileId={}",
-                txn.getIngestTxnId(),
-                txn.getStoreFileId());
+Navigate to:
 
-        BatchDocSearchCriteria repoCriteria =
-                new BatchDocSearchCriteria();
+.github/workflows
 
-        repoCriteria.setKeyName("Id");
-        repoCriteria.setKeyValue(txn.getStoreFileId());
 
-        BatchDocOption outputFileBatchDocOption =
-                new BatchDocOption();
+⸻
 
-        outputFileBatchDocOption.setKeyName("outputFileName");
+✅ Step 1: Spec Workflow – Pre-Release
 
-        String extension =
-                extractExtension(txn.getStoreFileId());
+Workflow:
 
-        outputFileBatchDocOption.setKeyValue(
-                txn.getStoreFileId() + extension
-        );
+specification-workflow-caller.yml
 
-        BatchDocProcess process =
-                new BatchDocProcess();
+Purpose:
+	•	Performs validation
+	•	Checks OpenAPI schema correctness
+	•	Detects formatting or structure errors
 
-        process.setRepositorySearchCriteria(
-                List.of(repoCriteria)
-        );
+🚨 Do not proceed if this step fails.
 
-        process.setOption(
-                List.of(outputFileBatchDocOption)
-        );
+⸻
 
-        log.debug("BatchDoc request prepared successfully for txnId={}",
-                txn.getIngestTxnId());
+✅ Step 2: Spec Workflow – Release (feature/development branch)
 
-        return new BatchDocRequest(
-                storConfig.getRepoId(),
-                storConfig.getFolderPath(),
-                List.of(process)
-        );
-    }
+Trigger release workflow on:
+	•	feature branch
+	•	development branch
 
-    private static String extractExtension(String fileName) {
+Purpose:
+	•	Publishes spec with _dev tag
+	•	Pushes new spec version to:
 
-        String extension = ".pdf";
+https://github.com/TD-Universe/OAS-DGVLA-*****
 
-        if (fileName == null || fileName.isBlank()) {
-            log.warn("File name is null or empty. Defaulting extension to .pdf");
-            return extension;
-        }
+You should see:
 
-        int dotIndex = fileName.lastIndexOf(".");
+new spec version (with _dev tag)
 
-        if (dotIndex > 0 && dotIndex < fileName.length() - 1) {
-            extension = fileName.substring(dotIndex);
-            log.debug("Extracted extension '{}' from fileName={}",
-                    extension,
-                    fileName);
-        } else {
-            log.debug("No extension found in fileName={}. Defaulting to .pdf",
-                    fileName);
-        }
 
-        return extension;
-    }
-}
+⸻
+
+✅ Step 3: Certification Workflow – Pre-Release
+
+Workflow:
+
+certification-workflow-caller.yml
+
+Purpose:
+	•	Validates certification artifacts
+	•	Ensures manifest correctness
+	•	Performs compliance checks
+
+Again — do not move forward if this fails.
+
+⸻
+
+✅ Step 4: Certification Workflow – Release
+
+Trigger release version of certification workflow.
+
+Purpose:
+	•	Uploads certification artifact
+	•	Publishes to certification repository
+	•	Prepares for automation pickup
+
+⸻
+
+4️⃣ Final Spec Promotion to Master
+
+After validation on feature/dev:
+
+Run:
+
+Spec workflow – Release – master
+
+Purpose:
+	•	Publishes final spec version
+	•	Removes _dev tag
+	•	Creates official version in:
+
+https://github.com/TD-Universe/OAS-DGVLA-*****
+
+Expected Result:
+
+New spec version (without _dev tag)
+
+
+⸻
+
+5️⃣ Verification Checklist
+
+After all workflows complete:
+
+✔ Confirm new version exists in:
+
+TD-Universe/OAS-DGVLA-*****
+
+✔ Confirm certification artifact uploaded
+
+✔ Confirm no workflow failures
+
+✔ Confirm branch is merged if required
+
+⸻
+
+6️⃣ Automation & Marketplace Availability
+
+If all steps are completed successfully:
+	•	Changes are picked up by automation next day
+	•	Scope becomes available in Marketplace:
+
+https://mrkp.prod.td.com/apistore/discover/
+
+⏳ Timeline:
+
+If completed today → Marketplace availability expected next business day (typically Monday if done Friday).
+
+⸻
+
+7️⃣ Common Mistakes to Avoid
+
+❌ Running certification before spec release
+❌ Skipping pre-release validation
+❌ Publishing directly to master without feature validation
+❌ Not checking _dev vs non-dev version
+❌ Incorrect manifest file
+
+⸻
+
+8️⃣ Repository Structure Reference
+
+Example branch:
+
+aesig-api
+
+Contains:
+
+.github/workflows/
+certifications/
+CODEOWNERS
+EDP.yml
+README
+
+Example certification files:
+
+api.esignatureevents.esignlive.json
+manifest_auto.json
+
+
+⸻
+
+9️⃣ High-Level Flow Diagram
+
+Update Spec →
+Spec Pre-Release →
+Spec Release (Dev) →
+Cert Pre-Release →
+Cert Release →
+Spec Release (Master) →
+Automation Pickup →
+Marketplace Availability
+
+
+⸻
+
+🔟 Summary
+
+This process ensures:
+	•	Spec validation
+	•	Version control integrity
+	•	Certification compliance
+	•	Automated publishing
+	•	Marketplace availability
+
+Follow the workflow sequence strictly.
+
+⸻
+
+If you want, I can also:
+	•	Format this into Confluence Wiki Markup
+	•	Generate a visual architecture diagram
+	•	Add a troubleshooting section
+	•	Add screenshots mapping to each step
+	•	Convert into a PDF-ready formal document
+
+Just tell me 👍
