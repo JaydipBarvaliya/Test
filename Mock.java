@@ -1,37 +1,68 @@
-@Async
-public void triggerAsync(StorTransaction txn,
-                         StorConfig storConfig,
-                         String traceabilityId) {
+@Transactional
+public void process(String ingestTxnId) {
 
-    String txnId = txn.getIngestTxnId();
     long startTime = System.currentTimeMillis();
 
-    log.info("Async BatchDoc trigger started for txnId={}", txnId);
+    log.debug("Retry processing started for ingestTxnId={}", ingestTxnId);
+
+    Optional<StorTransaction> optionalTxn =
+            txnRepo.findByIngestTxnId(ingestTxnId);
+
+    if (optionalTxn.isEmpty()) {
+        log.warn("Retry skipped. Transaction {} does not exist or already processed.",
+                ingestTxnId);
+        return;
+    }
+
+    StorTransaction txn = optionalTxn.get();
 
     try {
 
-        log.debug("Calling BatchDoc API for txnId={}, traceabilityId={}",
-                txnId, traceabilityId);
+        log.debug("Triggering BatchDoc API for ingestTxnId={}, currentRetryCount={}",
+                ingestTxnId, txn.getRetryCount());
 
-        batchDocService.triggerBatchDocAPI(txn, storConfig, traceabilityId);
+        batchDocService.triggerBatchDocAPI(
+                txn,
+                txn.getConfig(),
+                txn.getTraceabilityId()
+        );
 
         long duration = System.currentTimeMillis() - startTime;
 
-        log.info("Async BatchDoc trigger completed successfully for txnId={} in {} ms",
-                txnId, duration);
+        log.info("Retry successful for ingestTxnId={} in {} ms",
+                ingestTxnId, duration);
 
     } catch (Exception ex) {
 
-        log.error("Async BatchDoc trigger FAILED for txnId={}. Updating status to ERROR/RECEIVED",
-                txnId, ex);
+        log.error("Retry failed for ingestTxnId={}", ingestTxnId, ex);
 
-        storTxnRepository.updateStatusAndState(
-                txnId,
-                TxnStatus.ERROR,
-                TxnState.RECEIVED,
-                OffsetDateTime.now()
-        );
+        int newRetryCount = txn.getRetryCount() + 1;
+        txn.setRetryCount(newRetryCount);
 
-        log.info("Transaction {} marked as ERROR and RECEIVED for retry.", txnId);
+        if (newRetryCount >= failureRetryMax) {
+
+            txn.setStatus(TxnStatus.FAILURE);
+
+            log.warn("Retry limit reached for ingestTxnId={}. Marked as FAILURE. retryCount={}",
+                    ingestTxnId, newRetryCount);
+
+        } else {
+
+            txn.setStatus(TxnStatus.ERROR);
+
+            log.info("Retry scheduled again for ingestTxnId={}. retryCount={}/{}",
+                    ingestTxnId, newRetryCount, failureRetryMax);
+        }
+
+        txn.setLastUpdateDttm(OffsetDateTime.now());
+        txn.setState(TxnState.RECEIVED);
+
+        txnRepo.save(txn);
+
+        log.debug("Transaction {} updated in DB with status={} state={} retryCount={}",
+                ingestTxnId,
+                txn.getStatus(),
+                txn.getState(),
+                txn.getRetryCount());
     }
 }
