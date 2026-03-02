@@ -1,112 +1,69 @@
-GET Transaction Status (Ingest) ✅
+Perfect callout ✅. If you’re not passing secondary token at all, then we should not even mention “Primary + Secondary” as our behavior. We’ll state it as: BatchDoc supports it, but DGVLM intentionally uses Primary-only.
 
-Endpoint
-	•	Method: GET
-	•	Path: /ingest/status/{ingestTxnId}
-	•	Operation: ingest.status
-
-What it does (high-level)
-
-This endpoint returns the current status + state of an ingestion transaction using the ingestTxnId.
-It basically:
-	1.	Validates ingestTxnId is not blank
-	2.	Looks up the transaction in DB (via txnRepo.findByIngestTxnId(ingestTxnId))
-	3.	Returns the mapped response (IngestTxnRs) if found
-	4.	Throws an error if not found / invalid input
+Here’s the updated Confluence-ready, cleanly sectioned version you can paste:
 
 ⸻
 
-Request
+Cascading Scopes — Why it’s not feasible for DGVLM (especially Rescheduler/Cron)
 
-URL (example)
-
-GET {{baseUrl}}/ingest/status/{{ingestTxnId}}
-
-Path Parameter
-	•	ingestTxnId (required)
-Unique ingestion transaction identifier.
-
-Headers (required in your flow)
-	•	Authorization: Bearer {{dgvlmToken}}
-	•	lobId: {{lobid}}
-	•	traceabilityID: {{traceabilityID}}
-	•	Accept: application/json
-
-Request Body: None (this is a GET)
+1) Definitions (what we mean by “Primary Token”)
+	•	Primary Token = the OAuth/JWT token received from LOB → DGVLM.
+	•	This token represents the LOB/user context and is the only token we forward downstream.
+	•	DGVLM does not send any Secondary Token to BatchDoc (even though BatchDoc may support it).
 
 ⸻
 
-Success Response (200)
+2) How token propagation works in the real-time (Ingest) flow
 
-Response Body (IngestTxnRs) – example
+Flow: LOB → DGVLM → BatchDoc (+ DGVLA / Kafka-related actions)
 
-{
-  "ingestTxnId": "84684cc7-6f58-4a64-916b-ad59ace58fa4",
-  "lobId": "tdi",
-  "status": "ACTIVE",
-  "state": "FN_BATCH_TRIGGERED",
-  "retryCount": 0,
-  "creationDttm": "2026-03-02T11:45:15.451029Z",
-  "lastUpdatedDttm": "2026-03-02T11:45:16.619729Z",
-  "digitalVault": {
-    "drawerId": "....",
-    "folderId": "....",
-    "fileToken": "this value we get from the DGVLA",
-    "fileName": "..."
-  },
-  "storage": {
-    "fileId": "....",
-    "txnId": "....",
-    "fileName": "..."
-  }
-}
+In the ingest (sync) call:
+	•	LOB sends a Primary Token to DGVLM.
+	•	DGVLM forwards the same Primary Token when calling:
+	•	BatchDoc API
+	•	DGVLA API (if applicable in the use-case)
+	•	The Primary Token already contains all required scopes needed to:
+	•	Call BatchDoc
+	•	Call DGVLA
+	•	Perform downstream operations such as pulling/processing events from Kafka (as per the authorization design for these flows)
 
+✅ Result: Ingest flow can support “cascading” behavior because the LOB token is available in-request and includes required scopes.
 
 ⸻
 
-Status / State meanings (what consumers should understand)
+3) Why cascading scopes breaks for Rescheduler / Cron retry processing
 
-status (overall outcome)
+Key constraint: The cron/rescheduler runs without an active LOB request context.
 
-Valid values:
-	•	ACTIVE → transaction is currently being processed
-	•	SUCCESS → transaction completed successfully
-	•	ERROR → transaction is in error state and requires error-handling flow
-	•	FAILURE → transaction failed and max retry count has been reached
+So when the rescheduler executes:
+	•	There is no LOB Primary Token available (because no LOB call is happening at that time).
+	•	We cannot recreate the LOB token (it is user/session/context-driven).
+	•	We cannot store/persist the LOB token for later use (security + compliance + token expiration).
 
-state (where in the pipeline)
-
-Valid values (current contract):
-	•	RECEIVED → request received + validations done, next step is to call FileNet BatchDoc API
-	•	FN_BATCH_TRIGGERED → FileNet BatchDoc API triggered, next step is to await Kafka message
-	•	DGVL_PUSHING → Kafka message received, pushing file to DGVL via DGVLA
-	•	DGVL_COMPLETE → push to DGVL completed, next step is delete file from NAS
-	•	COMPLETE → all necessary steps completed
+❌ Therefore, cascading scopes is not feasible in async retry because cascading assumes:
+	•	“Take the LOB Primary Token and propagate it downstream”
+	•	But in cron/rescheduler, that token does not exist.
 
 ⸻
 
-Error Responses (high-level)
+4) What we do instead (Rescheduler auth strategy)
 
-Your OpenAPI lists these:
-	•	400 Bad Request (ex: blank ingestTxnId, or “transaction not found” based on current service behavior)
-	•	401 Unauthorized (missing/invalid token)
-	•	403 Forbidden (token valid but not permitted)
-	•	404 Not Found (defined in spec; depending on implementation you may currently throw 400 for “not found”)
-	•	405 Method Not Allowed
-	•	500 Internal Server Error
-	•	503 Service Unavailable
+For rescheduler processing:
+	•	DGVLM generates a service token by calling PingFed (service-to-service authentication).
+	•	That generated token is treated as the Primary Token for downstream calls (BatchDoc/DGVLA) in this background execution context.
+	•	No Secondary Token is passed to BatchDoc in this design.
 
 ⸻
 
-Edge cases + things to remember ⚠️
-	•	Blank / null ingestTxnId: should fail fast (you’re already validating this).
-	•	Transaction not found: currently your service throws an exception (looks like 400 in your code path).
-	•	If you want REST-purity, 404 is cleaner. But document what you actually return today.
-	•	Logging: always sanitize ingestTxnId before logging (you’re using LogSanitizeUtil.sanitizeLogObj(...) ✅).
-	•	Response consistency: creationDttm and lastUpdatedDttm are date-time strings. Clients should treat them as UTC timestamps.
-	•	digitalVault.fileToken: populated from DGVLA (so clients shouldn’t assume it exists until you reach the DV-related state).
-	•	storage.*: may be partially present depending on where the transaction is in the flow (early states might not have all IDs yet).
+5) Summary decision
+
+✅ Cascading scope is applicable only for synchronous ingest requests where the LOB Primary Token exists and already contains all required scopes.
+❌ Cascading scope is not possible for cron/rescheduler retry processing because the LOB Primary Token is unavailable and cannot be stored.
 
 ⸻
 
-If you paste the exact request you’re sending (Postman raw details are fine), I’ll align the doc 1:1 with your actual header names/casing (ex: traceabilityID vs traceabilityId) so you don’t get pinged in review.
+If you want, I can also add a mini flow diagram (ASCII / Confluence-friendly) showing:
+	•	Ingest: LOB token exists → forward it
+	•	Rescheduler: no LOB token → PingFed token → forward it
+
+Just say “add diagram” and I’ll paste it.
