@@ -1,35 +1,30 @@
--- Insert default configuration data
+mkdir -p /etc/credentials
 
-INSERT INTO STOR_CONFIG (
-    ID,
-    LOB_ID,
-    STOR_SYS,
-    REPO_ID,
-    FOLDER_PATH,
-    NAS_LOCATION
-) VALUES (
-    STOR_CONFIG_SEQ.NEXTVAL,
-    'dna',
-    'FileNet',
-    'CS_FBD_LSWOS1',
-    '/mnt/dgvlm-nas-dna/BatchDoc_DNA',
-    '\\NSAPDVCS01.D2-TDBFG.COM\SRCHD_0027D'
-);
 
-INSERT INTO STOR_CONFIG (
-    ID,
-    LOB_ID,
-    STOR_SYS,
-    REPO_ID,
-    FOLDER_PATH,
-    NAS_LOCATION
-) VALUES (
-    STOR_CONFIG_SEQ.NEXTVAL,
-    'tdiclaims',
-    'FileNet',
-    'DGVLM_GWCC_TDI',
-    '/TDI-FileNet-Documents/BATCHDOC',
-    '\\NSAPDVCS03.D2-TDBFG.COM\ICDMS_007F2'
-);
+vi /etc/credentials/d2-tdbfg.nasuserpass
 
-COMMIT;
+username=TDGVLM942NASB
+password=<password>
+domain=d2-tdbfg
+
+
+chmod 600 /etc/credentials/d2-tdbfg.nasuserpass
+
+
+mount -t cifs //NSAPDVCS01.D2-TDBFG.COM/SRCHD_0027D /mnt/dgvlm-nas-dna \
+-o credentials=/etc/credentials/d2-tdbfg.nasuserpass
+
+vi /etc/salt/grains
+
+cifs:
+  credential: nasuserpass
+  device: //NSAPDVCS01.D2-TDBFG.COM/SRCHD_0027D
+  name: /mnt/dgvlm-nas-dna
+  groupname: springboot
+  dirmode: 0775
+  filemode: 0640
+
+systemctl restart salt-minion
+
+salt-call state.sls cifs
+
