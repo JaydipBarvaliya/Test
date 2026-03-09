@@ -1,16 +1,35 @@
-Hi Taly and ARE Practice Automation Corporate Platforms Team,
+-- Insert default configuration data
 
-I wanted to follow up again regarding ticket AREEETS-960 related to NAS access required for the DGVLM API as part of the TDI Iron Mountain work.
+INSERT INTO STOR_CONFIG (
+    ID,
+    LOB_ID,
+    STOR_SYS,
+    REPO_ID,
+    FOLDER_PATH,
+    NAS_LOCATION
+) VALUES (
+    STOR_CONFIG_SEQ.NEXTVAL,
+    'dna',
+    'FileNet',
+    'CS_FBD_LSWOS1',
+    '/mnt/dgvlm-nas-dna/BatchDoc_DNA',
+    '\\NSAPDVCS01.D2-TDBFG.COM\SRCHD_0027D'
+);
 
-We have been trying to get assistance on this request for some time now and have already raised the necessary tickets and involved multiple teams. However, the request still appears unassigned and pending review, and we have not yet been able to connect with a specific resource who can help move this forward.
+INSERT INTO STOR_CONFIG (
+    ID,
+    LOB_ID,
+    STOR_SYS,
+    REPO_ID,
+    FOLDER_PATH,
+    NAS_LOCATION
+) VALUES (
+    STOR_CONFIG_SEQ.NEXTVAL,
+    'tdiclaims',
+    'FileNet',
+    'DGVLM_GWCC_TDI',
+    '/TDI-FileNet-Documents/BATCHDOC',
+    '\\NSAPDVCS03.D2-TDBFG.COM\ICDMS_007F2'
+);
 
-At this point, this dependency is actively blocking our implementation, and we are already beyond our expected timelines for this work. Given the urgency and impact on delivery, we would greatly appreciate it if someone from the ARE team could please take ownership of this request or help assign it to the appropriate resource as soon as possible.
-
-If this ticket needs to be redirected to another group, please let us know so we can coordinate immediately.
-
-We would be grateful if this request could be expedited, as this access is critical for us to proceed.
-
-Thank you for your help.
-
-Best regards,  
-Jaydip
+COMMIT;
