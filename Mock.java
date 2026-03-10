@@ -1,9 +1,1 @@
-@Modifying
-@Transactional
-@Query(value = """
-DELETE FROM stor_ingest_txn
-WHERE status = 'SUCCESS'
-AND state = 'COMPLETE'
-AND last_update_dttm < SYSTIMESTAMP - :retentionDays
-""", nativeQuery = true)
-int deleteExpiredTransactions(@Param("retentionDays") int retentionDays);
+Since our service is responsible for chunking and sequentially uploading the file, we need to persist the upload progress. If we keep this only in application memory, any restart or failure would lose the upload state and force us to restart the entire upload. Persisting the chunk status allows us to resume from the failed chunk instead of restarting the whole upload.
