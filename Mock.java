@@ -1,216 +1,267 @@
-Below is a clean, Confluence-style documentation you can directly use for your DigiVLM project. I kept it structured, concise, and engineering-focused, the way backend teams typically document retention jobs.
+Below is a clean, Confluence-ready documentation for the NAS mounting approach you implemented. I kept it structured so your team (DevOps / future devs) can understand it quickly. 🚀
 
 ⸻
 
-Transaction Retention Cleanup Process
+NAS Drive Mounting Configuration – DGVLM
 
 1. Overview
 
-The Transaction Retention Cleanup Process is implemented to automatically remove completed transactions from the STOR_INGEST_TXN table after a configured retention period.
+The DGVLM application mounts a NAS (Network Attached Storage) location on the VM using the Salt CIFS module.
+The mount configuration is defined inside the CD.yml deployment configuration file, and the credentials are securely retrieved from Vault during deployment via the EDP pipeline.
 
-The purpose of this process is to:
-	•	Prevent uncontrolled growth of the transaction table.
-	•	Maintain database performance.
-	•	Retain only relevant operational data for troubleshooting and monitoring.
-	•	Ensure completed transactions are removed safely after a defined time window.
+The NAS drive is mounted on the VM under:
 
-The cleanup is performed through a scheduled job that runs weekly and deletes transactions that have been completed and inactive beyond the configured retention period.
+/mnt/dgvlm-nas-<LOB_ID>
 
-⸻
+Example:
 
-2. Retention Strategy
+/mnt/dgvlm-nas-tdiclaims
 
-The retention logic is based on the last update timestamp (LAST_UPDATE_DTTM) rather than the creation timestamp.
-
-Why LAST_UPDATE_DTTM is Used
-
-Transactions in the STOR_INGEST_TXN table pass through multiple processing stages including retries and status updates. Because of this lifecycle:
-	•	A transaction may be created at time T1.
-	•	It may go through multiple retries and state changes.
-	•	The transaction may only be successfully completed at a later time T2.
-
-If retention were calculated using CREATION_DTTM, the system might delete transactions that are still being retried or processed.
-
-Using LAST_UPDATE_DTTM ensures:
-	•	Retention period starts after the transaction has fully completed.
-	•	Active or retrying transactions are never deleted prematurely.
-	•	Cleanup reflects the true lifecycle completion time.
-
-Example lifecycle:
-
-Date	Event
-March 1	Transaction created
-March 3	Retry attempt
-March 7	Retry attempt
-March 15	Processing completed successfully
-
-In this case:
-
-LAST_UPDATE_DTTM = March 15
-
-Retention countdown begins from March 15, not March 1.
+This allows the application to read/write files directly to the mounted NAS location.
 
 ⸻
 
-3. Transaction Completion Criteria
+2. CIFS Mount Configuration
 
-Transactions are only eligible for deletion when they have reached their final completed state.
-
-The system verifies completion using two fields:
-
-Column	Required Value	Meaning
-STATUS	SUCCESS	All processing steps completed successfully
-STATE	COMPLETE	Associated file has been successfully removed from NAS
-
-Final Transaction State
-
-A transaction is considered fully completed only when:
-
-STATUS = 'SUCCESS'
-STATE  = 'COMPLETE'
-
-This ensures:
-	•	The transaction processing workflow has finished.
-	•	Associated files have already been cleaned up from the NAS drive.
-	•	The transaction is no longer required by the system.
-
-Only transactions satisfying both conditions are considered for retention cleanup.
-
-⸻
-
-4. Retention Period Configuration
-
-The retention period is not hardcoded in the application.
-
-Instead, it is stored in the configuration table and loaded dynamically at runtime.
+The NAS mount configuration is defined under the salt_formula -> cifs section.
 
 Example configuration:
 
-Configuration Key	Value
-TXN_RETENTION_DAYS	15
+cifs:
+  - name: /mnt/dgvlm-nas-tdiclaims
+    device: //NSAPDVCS03.D2-TDBFG.COM/ICDMS_007F3
+    credential: TDGVLM942NASB
+    username: springboot
+    groupname: springboot
+    dirmode: '0775'
+    filemode: '0640'
 
-This configuration allows:
-	•	Operations teams to adjust retention without code changes.
-	•	Flexible retention management across environments.
+Field Explanation
 
-The scheduler loads this configuration value and uses it to determine which transactions should be deleted.
+Field	Description
+name	Local mount path on the VM
+device	NAS share path
+credential	Credential name used to fetch the password from Vault
+username	Local Linux user that owns the mounted directory
+groupname	Local Linux group for permissions
+dirmode	Directory permission
+filemode	File permission
 
-⸻
-
-5. Scheduler Configuration
-
-The cleanup job is executed through a scheduled task.
-
-Cron Expression
-
-The cron expression is configured in the configuration project and loaded by the application.
-
-0 0 0 ? * SAT
-
-Execution Schedule
-
-Field	Value	Meaning
-Second	0	Start at second 0
-Minute	0	Minute 0
-Hour	0	Midnight
-Day of Week	Saturday	Every Saturday
-
-Execution Frequency
-
-Every Saturday at 00:00 (midnight)
-
-Running the cleanup weekly ensures:
-	•	Minimal impact on system performance.
-	•	Regular cleanup of old transactions.
-	•	Reduced database growth.
 
 ⸻
 
-6. Cleanup Query
+3. Credential Handling (Important)
 
-When the scheduler runs, it executes the following cleanup query:
+The NAS authentication uses Vault secrets managed through the EDP pipeline.
 
-DELETE FROM STOR_INGEST_TXN
-WHERE STATUS = 'SUCCESS'
-AND STATE = 'COMPLETE'
-AND LAST_UPDATE_DTTM < SYSTIMESTAMP - :retentionDays;
+Example vault configuration:
 
-Query Explanation
+operation_secrets:
+  vault:
+    - name: "TDGVLM942NASB"
+      type: "static"
 
-Condition	Purpose
-STATUS = 'SUCCESS'	Ensures transaction completed successfully
-STATE = 'COMPLETE'	Ensures file cleanup from NAS finished
-LAST_UPDATE_DTTM < SYSTIMESTAMP - retentionDays	Ensures retention period has expired
+Key Behavior
+	•	The credential value must exactly match the Vault secret name.
+	•	During deployment, the EDP pipeline prompts the user to supply a value for the secret.
+	•	The value supplied is treated as the password for the NAS account.
 
-Only transactions meeting all three conditions are removed.
+Example:
 
-⸻
+Credential Name : TDGVLM942NASB
+Value entered   : <NAS account password>
 
-7. Example Scenario
+Salt then automatically creates a credentials file on the VM:
 
-Assume:
+/etc/credentials/<credential-name>
 
-Retention Period = 15 days
+Example:
 
-Example transaction timeline:
+/etc/credentials/d2-tdbfg.tdgvlm942nasb
 
-Date	Event
-March 1	Transaction created
-March 5	Retry
-March 10	Retry
-March 15	Success + Complete
+Example file content:
 
-Retention countdown begins from:
+username=tdgvlm942nasb
+password=<password provided in pipeline>
+domain=d2-tdbfg
 
-LAST_UPDATE_DTTM = March 15
+⚠️ Important:
 
-Transaction becomes eligible for deletion on:
-
-March 30
-
-When the scheduler runs after this date, the transaction will be removed.
+There is no separate password field in the configuration.
+The password is supplied as the value of the Vault secret during deployment.
 
 ⸻
 
-8. Benefits of This Approach
+4. Mount Path Convention
 
-This retention strategy provides several operational benefits:
+All NAS mounts follow this naming convention:
 
-Safe Cleanup
+/mnt/dgvlm-nas-<LOB_ID>
 
-Transactions are only deleted after successful completion and cleanup.
+Where:
+	•	dgvlm-nas → constant prefix
+	•	<LOB_ID> → Line Of Business identifier
 
-Accurate Retention Timing
+Example:
 
-Retention is based on actual completion time, not insertion time.
+/mnt/dgvlm-nas-tdiclaims
 
-Configurable Retention
+Here:
 
-Retention period can be modified through the configuration table without redeployment.
+LOB_ID = tdiclaims
 
-Reduced Database Growth
-
-Completed transactions are periodically removed to maintain database performance.
-
-Operational Stability
-
-Weekly cleanup ensures minimal load on the database while maintaining efficient storage management.
 
 ⸻
 
-9. Summary
+5. Adding Support for a New LOB
 
-The transaction retention cleanup process works as follows:
-	1.	A scheduler runs every Saturday at midnight.
-	2.	The scheduler loads the retention period from the configuration table.
-	3.	The system identifies transactions that:
-	•	have STATUS = SUCCESS
-	•	have STATE = COMPLETE
-	•	have LAST_UPDATE_DTTM older than the configured retention period.
-	4.	Those transactions are deleted from the STOR_INGEST_TXN table.
+Whenever a new LOB requires a NAS location, the following changes are required.
 
-This mechanism ensures the transaction table remains optimized while preserving data for the required retention window.
+Step 1 — Add CIFS Entry
+
+Add a new entry under the cifs array.
+
+Example:
+
+cifs:
+  - name: /mnt/dgvlm-nas-dna
+    device: //NSAPDVCS03.D2-TDBFG.COM/DNA_SHARE
+    credential: TDGVLM942NASB
+    username: springboot
+    groupname: springboot
+    dirmode: '0775'
+    filemode: '0640'
+
 
 ⸻
 
-If you want, I can also generate a small architecture diagram (scheduler → config → cleanup service → DB) which would make this documentation look much better in Confluence.
+Step 2 — Mount Path
+
+Follow the standard format:
+
+/mnt/dgvlm-nas-<LOB_ID>
+
+Examples:
+
+/mnt/dgvlm-nas-dna
+/mnt/dgvlm-nas-tdi
+/mnt/dgvlm-nas-claims
+
+
+⸻
+
+Step 3 — Ensure Environment Mapping
+
+Each environment must point to the correct NAS share.
+
+Example:
+
+Environment	NAS Server
+DEV	NSAPDVCS03
+SIT	SIT NAS Server
+PAT	PAT NAS Server
+
+Each environment block in CD.yml should contain the correct device path.
+
+Example:
+
+DEV
+//NSAPDVCS03.D2-TDBFG.COM/ICDMS_007F3
+
+SIT
+//SIT-NAS-SERVER/ICDMS_XXXX
+
+
+⸻
+
+6. Deployment Flow
+
+The mount process happens automatically during deployment.
+
+Step-by-step flow
+	1.	Developer pushes configuration changes.
+	2.	EDP pipeline starts deployment.
+	3.	Pipeline prompts for Vault secret values.
+	4.	User provides the NAS password for the credential.
+	5.	Salt retrieves the secret.
+	6.	Salt generates credentials file:
+
+/etc/credentials/<credential-name>
+
+	7.	Salt executes the CIFS mount state.
+	8.	NAS share gets mounted under:
+
+/mnt/dgvlm-nas-<LOB_ID>
+
+
+⸻
+
+7. Verification Steps
+
+After deployment, verify the mount using:
+
+Check mount
+
+mount | grep dgvlm
+
+or
+
+df -h | grep dgvlm
+
+Check credential file
+
+cat /etc/credentials/*
+
+Check mount directory
+
+ls -l /mnt/dgvlm-nas-tdiclaims
+
+
+⸻
+
+8. Troubleshooting
+
+Authentication Failure
+
+Error example:
+
+STATUS_LOGON_FAILURE
+
+Possible causes:
+	•	Incorrect password supplied during deployment
+	•	NAS account does not have share permission
+	•	Incorrect domain
+
+⸻
+
+Mount Failure
+
+Check logs:
+
+dmesg | tail
+
+or
+
+journalctl -u salt-minion
+
+
+⸻
+
+9. Key Points to Remember
+	•	Credential name must match Vault secret name.
+	•	Password is provided during deployment through the EDP pipeline.
+	•	No password is stored in configuration files.
+	•	Each new LOB requires a new CIFS entry.
+	•	Mount path always follows:
+
+/mnt/dgvlm-nas-<LOB_ID>
+
+
+⸻
+
+✅ If you want, I can also give you two additional things that will make this documentation 10× better for TD teams:
+
+1️⃣ Architecture diagram (Salt → Vault → NAS → VM mount)
+2️⃣ Sequence diagram of the EDP deployment flow
+
+Those help a lot during architecture reviews and onboarding.
