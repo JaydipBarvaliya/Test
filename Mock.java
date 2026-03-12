@@ -1,72 +1,240 @@
-@Query(value = """
+Below is a clean Confluence-style documentation you can directly paste into your project docs. I kept it structured, technical, and practical so another engineer or ops person can understand the intent quickly.
+
+⸻
+
+Stuck BatchDoc Transaction Timeout Scheduler
+
+Overview
+
+In the DGVLM ingestion workflow, transactions are processed asynchronously through BatchDoc and Kafka. After DGVLM triggers BatchDoc processing, the system waits for a Kafka response indicating completion.
+
+However, in rare scenarios the expected Kafka message may never arrive due to external failures or network issues. In such cases, transactions can remain indefinitely in an ACTIVE state with FN_BATCH_TRIGGERED state.
+
+To prevent these transactions from remaining stuck indefinitely, a scheduled job periodically identifies such transactions and marks them as FAILURE if they exceed a configurable timeout threshold.
+
+⸻
+
+Transaction Processing Flow
+
+1. Transaction Received by DGVLM
+
+When a request is first received:
+
+status = ACTIVE
+state  = RECEIVED
+
+
+⸻
+
+2. BatchDoc Processing Triggered
+
+DGVLM calls the BatchDoc API to process the file.
+
+status = ACTIVE
+state  = FN_BATCH_TRIGGERED
+
+At this stage:
+	•	BatchDoc processes the request
+	•	BatchDoc publishes a message to Kafka
+	•	DGVLM Kafka consumer polls and processes the message
+
+⸻
+
+3. Successful Processing
+
+When the Kafka message is received and processed:
+
+status = SUCCESS
+state  = COMPLETE
+
+
+⸻
+
+4. Error Processing
+
+If BatchDoc or Kafka returns an error:
+
+status = ERROR
+state  = ERROR
+
+
+⸻
+
+Problem Scenario: Stuck Transactions
+
+Sometimes the Kafka message may not arrive due to:
+	•	BatchDoc internal failure
+	•	Kafka publishing failure
+	•	Network connectivity issues
+	•	Kafka consumer lag or interruption
+	•	External system downtime
+
+In such situations, the transaction remains stuck in:
+
+status = ACTIVE
+state  = FN_BATCH_TRIGGERED
+
+Since no further update occurs, these transactions remain indefinitely in the system.
+
+⸻
+
+Solution: Timeout-Based Recovery
+
+To address this scenario, a scheduler periodically scans for transactions meeting the following criteria:
+
+status = ACTIVE
+state  = FN_BATCH_TRIGGERED
+last_update_dttm older than configured timeout
+
+If such transactions are found, they are marked as failed:
+
+status = FAILURE
+state  = ERROR
+
+This ensures the transaction lifecycle is properly closed.
+
+⸻
+
+Scheduler Configuration
+
+The scheduler runs based on the following configuration property:
+
+dgvlm.stuck.txns.timeout.scheduler.cron
+
+Example configuration:
+
+dgvlm.stuck.txns.timeout.scheduler.cron = 0 0 */4 * * *
+
+This runs the scheduler every 4 hours.
+
+⸻
+
+Timeout Configuration
+
+The timeout duration is configurable via application configuration.
+
+Example:
+
+dgvlm.batch.response.timeout.days = 2
+
+This indicates that if BatchDoc does not respond within 2 days, the transaction will be considered timed out.
+
+⸻
+
+Database Query Logic
+
+Step 1: Identify Stuck Transactions
+
+The scheduler first locks eligible transactions using the following query:
+
 SELECT ingest_txn_id
 FROM stor_ingest_txn
 WHERE status = 'ACTIVE'
-  AND state = 'FN_BATCH_TRIGGERED'
-  AND last_update_dttm < SYSTIMESTAMP - NUMTODSINTERVAL(:timeoutDays, 'DAY')
+AND state = 'FN_BATCH_TRIGGERED'
+AND last_update_dttm < SYSTIMESTAMP - NUMTODSINTERVAL(:timeoutDays, 'DAY')
 FOR UPDATE SKIP LOCKED
-""", nativeQuery = true)
-List<String> lockTimedOutBatchTransactions(@Param("timeoutDays") int timeoutDays);
+
+Explanation
+
+Clause	Purpose
+status = ACTIVE	Transaction is still in progress
+state = FN_BATCH_TRIGGERED	BatchDoc processing was triggered
+last_update_dttm < timeout	No update occurred within timeout period
+FOR UPDATE SKIP LOCKED	Prevents multiple scheduler instances from processing the same row
 
 
+⸻
 
-@Modifying
-@Transactional
-@Query(value = """
+Why FOR UPDATE SKIP LOCKED is Used
+
+This mechanism ensures safe concurrent execution.
+
+If multiple application instances are running the scheduler:
+	•	Each instance locks rows before processing
+	•	Already locked rows are skipped by other instances
+	•	Prevents duplicate processing
+
+This approach supports horizontal scaling.
+
+⸻
+
+Step 2: Mark Transactions as Failure
+
+Once the stuck transactions are identified, they are updated using:
+
 UPDATE stor_ingest_txn
 SET status = 'FAILURE',
-    state = 'ERROR',
-    last_update_dttm = SYSTIMESTAMP
+state = 'ERROR',
+last_update_dttm = SYSTIMESTAMP
 WHERE ingest_txn_id IN (:ids)
-""", nativeQuery = true)
-int markBatchTimeoutFailure(@Param("ids") List<String> ids);
 
-@Service
-@RequiredArgsConstructor
-@Slf4j
-public class BatchTimeoutService {
+This update indicates that the transaction failed due to timeout.
 
-    private final StorTxnRepository storTxnRepository;
+⸻
 
-    @Transactional
-    public int markTimedOutBatchTransactions() {
+Scheduler Execution Flow
+	1.	Scheduler starts based on configured cron schedule.
+	2.	Query identifies stuck transactions exceeding timeout.
+	3.	Rows are locked using FOR UPDATE SKIP LOCKED.
+	4.	Retrieved transaction IDs are updated to failure status.
+	5.	Scheduler logs the number of updated transactions.
 
-        List<String> stuckIds = storTxnRepository.lockStuckBatchTransactions();
+⸻
 
-        if (stuckIds.isEmpty()) {
-            return 0;
-        }
+Logging
 
-        int updated = storTxnRepository.markBatchTimeoutFailure(stuckIds);
+Typical log entries generated by the scheduler:
 
-        log.info("Marked {} BatchDoc timed-out transactions as FAILURE", updated);
+Transaction timeout scheduler started
+Found X stuck transactions
+Marked X transactions as FAILURE
+Transaction timeout scheduler completed
 
-        return updated;
-    }
-}
+These logs help operations teams monitor system health.
 
+⸻
 
+Benefits of This Approach
 
+Prevents Infinite Processing States
 
-@Component
-@RequiredArgsConstructor
-@Slf4j
-public class BatchTimeoutScheduler {
+Transactions will no longer remain indefinitely stuck.
 
-    private final BatchTimeoutService batchTimeoutService;
+⸻
 
-    @Scheduled(cron = "${dgvlm.batch.timeout.scheduler.cron}")
-    public void handleBatchTimeouts() {
+Improves System Observability
 
-        log.info("Batch timeout scheduler started");
+Operations teams can easily identify failure scenarios.
 
-        int updated = batchTimeoutService.markTimedOutBatchTransactions();
+⸻
 
-        log.info("Batch timeout scheduler completed. Updated {} records", updated);
-    }
-}
+Supports Horizontal Scaling
 
+FOR UPDATE SKIP LOCKED ensures safe execution across multiple instances.
 
-dgvlm.batch.timeout.scheduler.cron=0 0 */4 * * *
+⸻
 
+Configurable Timeout
 
+Timeout duration can be adjusted without code changes.
+
+⸻
+
+Operational Impact
+
+If a transaction is marked as FAILURE due to timeout:
+	•	The transaction lifecycle ends
+	•	The failure can be analyzed through logs
+	•	Retries can be handled through manual or automated mechanisms if required
+
+⸻
+
+Summary
+
+The Stuck Transaction Timeout Scheduler ensures that transactions waiting indefinitely for BatchDoc responses are automatically detected and marked as failed after a configurable timeout period.
+
+This mechanism improves system reliability, prevents indefinite transaction states, and ensures consistent transaction lifecycle management within the DGVLM system.
+
+⸻
+
+If you want, I can also give you a very short 6-line “Executive Overview” version of this documentation (the type architects like to put at the top of Confluence pages). It makes the doc look much more professional.
