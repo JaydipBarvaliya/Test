@@ -492,3 +492,7 @@ public class StorIngestFileTracking {
     @Column(name = "FILE_BLOCK")
     private byte[] fileBlock;
 }
+
+
+@OneToMany(mappedBy = "transaction", fetch = FetchType.LAZY)
+private List<StorIngestFileTracking> fileChunks;
