@@ -462,3 +462,33 @@ Do this:
 That is the right design for your case.
 
 If you want, next I can give you a full Confluence-ready documentation page for this new third table and cleanup behavior, in the same style as your existing DGVLM schema page.
+
+
+@Entity
+@Table(name = "STOR_INGEST_FILE_TRACKING")
+@Data
+@NoArgsConstructor
+public class StorIngestFileTracking {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "TRACKING_ID")
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "INGEST_TXN_ID", nullable = false)
+    private StorTransaction transaction;
+
+    @Column(name = "BLOCK_NUM")
+    private Integer blockNum;
+
+    @Column(name = "HASH")
+    private String hash;
+
+    @Column(name = "STATUS")
+    private String status;
+
+    @Lob
+    @Column(name = "FILE_BLOCK")
+    private byte[] fileBlock;
+}
