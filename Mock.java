@@ -1,161 +1,213 @@
-Yes — if your Ops team will actually use that information, then returning the duplicate IDs is perfectly reasonable. Admin APIs often expose more diagnostic detail than normal public APIs. The key is to keep the response structure clean and predictable.
+Got it. I’ll give you two complete files, ready to paste, with:
+	•	duplicate detection
+	•	bulk processing
+	•	proper logging
+	•	correct response fields
+	•	consistent counts
+	•	no partial snippets
 
-Let’s design it properly so it doesn’t become messy later.
+You only need to ensure your OpenAPI model already contains:
 
-⸻
-
-1️⃣ Recommended Response Structure
-
-Add two new fields:
-	•	duplicateCount
-	•	duplicateTxnIds
-
-Final response model:
-
-{
-  "requestedTxnCount": 4,
-  "successCount": 1,
-  "notFoundCount": 0,
-  "duplicateCount": 3,
-  "successTxnIds": ["A"],
-  "notFoundTxnIds": [],
-  "duplicateTxnIds": ["A", "A", "A"]
-}
-
-This makes it crystal clear for Ops.
-
-⸻
-
-2️⃣ Update Your OpenAPI Schema
-
-Add these fields.
-
-duplicateCount:
-  type: integer
-  description: Number of duplicate transaction IDs detected in request.
-
-duplicateTxnIds:
-  type: array
-  description: List of duplicate transaction IDs received in request.
-  items:
-    type: string
+requestedTxnCount
+successCount
+notFoundCount
+duplicateCount
+successTxnIds
+notFoundTxnIds
+duplicateTxnIds
 
 
 ⸻
 
-3️⃣ Detect Duplicates in Service
+1️⃣ AdminIngestService.java
 
-You should detect duplicates before any DB query.
+package com.td.dgvlm.api.service;
 
-Example:
+import com.td.dgvlm.api.repository.StorTxnRepository;
+import com.td.dgvlm.openapi.model.AdminIngestRequest;
+import com.td.dgvlm.openapi.model.AdminIngestRs;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
-List<String> inputTxnIds = request.getTxnsToReprocess();
+import java.util.*;
 
-Set<String> uniqueTxnIds = new LinkedHashSet<>();
-List<String> duplicateTxnIds = new ArrayList<>();
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AdminIngestService {
 
-for (String id : inputTxnIds) {
-    if (!uniqueTxnIds.add(id)) {
-        duplicateTxnIds.add(id);
+    private final StorTxnRepository txnRepo;
+
+    public AdminIngestRs reprocessTransactions(AdminIngestRequest request) {
+
+        List<String> inputTxnIds = request.getTxnsToReprocess();
+
+        log.info("Admin ingest reprocess requested for {} transactions", inputTxnIds.size());
+
+        if (inputTxnIds.isEmpty()) {
+            AdminIngestRs response = new AdminIngestRs();
+            response.setRequestedTxnCount(0);
+            response.setSuccessCount(0);
+            response.setNotFoundCount(0);
+            response.setDuplicateCount(0);
+            response.setSuccessTxnIds(Collections.emptyList());
+            response.setNotFoundTxnIds(Collections.emptyList());
+            response.setDuplicateTxnIds(Collections.emptyList());
+            return response;
+        }
+
+        /*
+         Detect duplicates
+         */
+        Set<String> uniqueIds = new LinkedHashSet<>();
+        List<String> duplicateTxnIds = new ArrayList<>();
+
+        for (String id : inputTxnIds) {
+            if (!uniqueIds.add(id)) {
+                duplicateTxnIds.add(id);
+            }
+        }
+
+        List<String> requestedTxnIds = new ArrayList<>(uniqueIds);
+
+        if (!duplicateTxnIds.isEmpty()) {
+            log.warn("Duplicate txnIds detected in request: {}", duplicateTxnIds);
+        }
+
+        /*
+         Fetch existing IDs from DB
+         */
+        List<String> existingTxnIds = txnRepo.findExistingTxnIds(requestedTxnIds);
+        Set<String> existingSet = new HashSet<>(existingTxnIds);
+
+        /*
+         Determine NOT FOUND
+         */
+        List<String> notFoundTxnIds = requestedTxnIds.stream()
+                .filter(id -> !existingSet.contains(id))
+                .toList();
+
+        /*
+         Bulk update FAILURE -> ERROR
+         */
+        int updatedCount = txnRepo.updateStatusToErrorBulk(existingTxnIds);
+
+        log.info("Bulk update completed. Updated={}, NotFound={}, Duplicates={}",
+                updatedCount,
+                notFoundTxnIds.size(),
+                duplicateTxnIds.size());
+
+        /*
+         Success IDs = existing IDs minus notFound
+         */
+        List<String> successTxnIds = existingTxnIds.stream()
+                .filter(id -> !notFoundTxnIds.contains(id))
+                .toList();
+
+        /*
+         Build response
+         */
+        AdminIngestRs response = new AdminIngestRs();
+
+        response.setRequestedTxnCount(inputTxnIds.size());
+        response.setSuccessCount(updatedCount);
+        response.setNotFoundCount(notFoundTxnIds.size());
+        response.setDuplicateCount(duplicateTxnIds.size());
+
+        response.setSuccessTxnIds(successTxnIds);
+        response.setNotFoundTxnIds(notFoundTxnIds);
+        response.setDuplicateTxnIds(duplicateTxnIds);
+
+        return response;
     }
 }
 
-List<String> requestedTxnIds = new ArrayList<>(uniqueTxnIds);
-
-Now you have:
-
-inputTxnIds      → original request
-requestedTxnIds  → unique IDs for DB processing
-duplicateTxnIds  → duplicates
-
 
 ⸻
 
-4️⃣ Continue with Bulk Processing
+2️⃣ AdminApiDelegateImpl.java
 
-Then run your bulk logic on requestedTxnIds only.
+package com.td.dgvlm.api.delegate;
 
-SELECT existing IDs
-UPDATE FAILURE → ERROR
+import com.td.dgvlm.api.service.AdminIngestService;
+import com.td.dgvlm.openapi.api.AdminApiDelegate;
+import com.td.dgvlm.openapi.model.AdminIngestRequest;
+import com.td.dgvlm.openapi.model.AdminIngestRs;
+import com.td.dgvlm.util.LogSanitizeUtil;
+import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
 
-Exactly like we discussed earlier.
+@Slf4j
+@Service
+@AllArgsConstructor
+public class AdminApiDelegateImpl implements AdminApiDelegate {
 
-⸻
+    private final AdminIngestService adminIngestService;
 
-5️⃣ Build Response
+    @Override
+    public ResponseEntity<AdminIngestRs> adminIngest(String traceabilityID,
+                                                     AdminIngestRequest adminIngestRequest) {
 
-AdminIngestRs response = new AdminIngestRs();
+        log.info("Admin ingest API invoked with {} txnIds. traceabilityId={}",
+                adminIngestRequest.getTxnsToReprocess().size(),
+                LogSanitizeUtil.sanitizeLogObj(traceabilityID));
 
-response.setRequestedTxnCount(inputTxnIds.size());
-response.setSuccessCount(successIds.size());
-response.setNotFoundCount(notFoundIds.size());
-response.setDuplicateCount(duplicateTxnIds.size());
+        AdminIngestRs response =
+                adminIngestService.reprocessTransactions(adminIngestRequest);
 
-response.setSuccessTxnIds(successIds);
-response.setNotFoundTxnIds(notFoundIds);
-response.setDuplicateTxnIds(duplicateTxnIds);
+        log.info("Admin ingest completed. requested={}, success={}, notFound={}, duplicates={}, traceabilityId={}",
+                response.getRequestedTxnCount(),
+                response.getSuccessCount(),
+                response.getNotFoundCount(),
+                response.getDuplicateCount(),
+                LogSanitizeUtil.sanitizeLogObj(traceabilityID));
 
-
-⸻
-
-6️⃣ Example Scenarios
-
-Case 1 — duplicates
-
-Input:
-
-[A, B, A, C]
-
-Response:
-
-requestedTxnCount = 4
-duplicateCount = 1
-successTxnIds = [A, B, C]
-duplicateTxnIds = [A]
-
-
-⸻
-
-Case 2 — heavy duplicate
-
-Input:
-
-[A, A, A, A]
-
-Response:
-
-requestedTxnCount = 4
-duplicateCount = 3
-successTxnIds = [A]
-duplicateTxnIds = [A, A, A]
-
-
-⸻
-
-7️⃣ Logging (important)
-
-Also log duplicates:
-
-if (!duplicateTxnIds.isEmpty()) {
-    log.warn("Duplicate txnIds detected in admin ingest request: {}",
-             LogSanitizeUtil.sanitizeLogObj(duplicateTxnIds));
+        return ResponseEntity.ok(response);
+    }
 }
 
-This helps debugging later.
 
 ⸻
 
-8️⃣ Final Advice
+3️⃣ Repository methods you must already have
 
-For admin/debug APIs, it is totally acceptable to expose:
-	•	duplicates
-	•	skipped IDs
-	•	counts
+Just confirming you should have these:
 
-because the audience is internal operations teams, not external clients.
+@Query(value = """
+SELECT ingest_txn_id
+FROM stor_ingest_txn
+WHERE ingest_txn_id IN (:txnIds)
+""", nativeQuery = true)
+List<String> findExistingTxnIds(List<String> txnIds);
 
-Your approach is reasonable.
+
+@Modifying
+@Transactional
+@Query(value = """
+UPDATE stor_ingest_txn
+SET status = 'ERROR',
+    last_update_dttm = SYSTIMESTAMP
+WHERE ingest_txn_id IN (:txnIds)
+AND status = 'FAILURE'
+""", nativeQuery = true)
+int updateStatusToErrorBulk(List<String> txnIds);
+
 
 ⸻
 
-If you want, I can also show you one very clean response structure used in internal APIs at banks that makes debugging even easier (it avoids multiple arrays like success/notFound/duplicate and instead uses a single result object per txn).
+4️⃣ What this implementation guarantees
+
+✔ detects duplicates
+✔ reports duplicates in response
+✔ bulk DB processing (2 queries only)
+✔ accurate counts
+✔ proper logging for ops
+✔ clean delegate/service separation
+
+⸻
+
+💡 One last improvement I strongly recommend for this admin API:
+limit request size (for example max 500 txnIds) so someone doesn’t send 20,000 IDs and crush your DB.
