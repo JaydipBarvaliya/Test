@@ -1,121 +1,106 @@
-You’re thinking in the right direction — the key is observability for Ops. The question is how much detail the API should expose vs what should just be handled internally.
+Yes — if your Ops team will actually use that information, then returning the duplicate IDs is perfectly reasonable. Admin APIs often expose more diagnostic detail than normal public APIs. The key is to keep the response structure clean and predictable.
 
-Let’s break it down honestly.
-
-⸻
-
-1️⃣ Your scenario
-
-Input:
-
-txnIds = [A, A, A, A]
-
-Current behavior if you deduplicate silently:
-
-requestedTxnCount = 4
-successCount = 1
-notFoundCount = 0
-
-Ops might think:
-
-4 requested
-1 success
-0 notFound
-→ what happened to the other 3?
-
-So yes — your concern is valid.
+Let’s design it properly so it doesn’t become messy later.
 
 ⸻
 
-2️⃣ The clean solution (best practice)
+1️⃣ Recommended Response Structure
 
-Instead of returning duplicateTxnIds, return a duplicateCount.
+Add two new fields:
+	•	duplicateCount
+	•	duplicateTxnIds
 
-This keeps the API clean but still explains the discrepancy.
-
-Example response:
+Final response model:
 
 {
   "requestedTxnCount": 4,
-  "processedTxnCount": 1,
-  "duplicateCount": 3,
   "successCount": 1,
   "notFoundCount": 0,
+  "duplicateCount": 3,
   "successTxnIds": ["A"],
-  "notFoundTxnIds": []
+  "notFoundTxnIds": [],
+  "duplicateTxnIds": ["A", "A", "A"]
 }
 
-This tells Ops everything:
-
-4 received
-3 duplicates
-1 processed
-
-No confusion.
+This makes it crystal clear for Ops.
 
 ⸻
 
-3️⃣ Why NOT return duplicateTxnIds list
+2️⃣ Update Your OpenAPI Schema
 
-Returning a full list like:
+Add these fields.
 
-duplicateTxnIds: [A, A, A]
+duplicateCount:
+  type: integer
+  description: Number of duplicate transaction IDs detected in request.
 
-is noisy and not very useful. Ops already knows the ID.
+duplicateTxnIds:
+  type: array
+  description: List of duplicate transaction IDs received in request.
+  items:
+    type: string
 
-A count is enough.
 
 ⸻
 
-4️⃣ How to implement duplicate detection
+3️⃣ Detect Duplicates in Service
 
-Very simple.
+You should detect duplicates before any DB query.
+
+Example:
 
 List<String> inputTxnIds = request.getTxnsToReprocess();
 
-Set<String> uniqueTxnIds = new LinkedHashSet<>(inputTxnIds);
+Set<String> uniqueTxnIds = new LinkedHashSet<>();
+List<String> duplicateTxnIds = new ArrayList<>();
 
-int duplicateCount = inputTxnIds.size() - uniqueTxnIds.size();
+for (String id : inputTxnIds) {
+    if (!uniqueTxnIds.add(id)) {
+        duplicateTxnIds.add(id);
+    }
+}
 
 List<String> requestedTxnIds = new ArrayList<>(uniqueTxnIds);
+
+Now you have:
+
+inputTxnIds      → original request
+requestedTxnIds  → unique IDs for DB processing
+duplicateTxnIds  → duplicates
 
 
 ⸻
 
-5️⃣ Update your response
+4️⃣ Continue with Bulk Processing
+
+Then run your bulk logic on requestedTxnIds only.
+
+SELECT existing IDs
+UPDATE FAILURE → ERROR
+
+Exactly like we discussed earlier.
+
+⸻
+
+5️⃣ Build Response
 
 AdminIngestRs response = new AdminIngestRs();
 
 response.setRequestedTxnCount(inputTxnIds.size());
-response.setProcessedTxnCount(requestedTxnIds.size());
-response.setDuplicateCount(duplicateCount);
 response.setSuccessCount(successIds.size());
 response.setNotFoundCount(notFoundIds.size());
+response.setDuplicateCount(duplicateTxnIds.size());
+
 response.setSuccessTxnIds(successIds);
 response.setNotFoundTxnIds(notFoundIds);
+response.setDuplicateTxnIds(duplicateTxnIds);
 
 
 ⸻
 
-6️⃣ Example outcomes
+6️⃣ Example Scenarios
 
-Case 1
-
-Input:
-
-[A, B, C]
-
-Response:
-
-requested = 3
-duplicate = 0
-success = 3
-notFound = 0
-
-
-⸻
-
-Case 2
+Case 1 — duplicates
 
 Input:
 
@@ -123,15 +108,15 @@ Input:
 
 Response:
 
-requested = 4
-duplicate = 1
-success = 3
-notFound = 0
+requestedTxnCount = 4
+duplicateCount = 1
+successTxnIds = [A, B, C]
+duplicateTxnIds = [A]
 
 
 ⸻
 
-Case 3
+Case 2 — heavy duplicate
 
 Input:
 
@@ -139,50 +124,38 @@ Input:
 
 Response:
 
-requested = 4
-duplicate = 3
-success = 1
-notFound = 0
+requestedTxnCount = 4
+duplicateCount = 3
+successTxnIds = [A]
+duplicateTxnIds = [A, A, A]
 
-Ops immediately understands.
-
-⸻
-
-7️⃣ Final recommendation
-
-Your response model should be:
-
-requestedTxnCount
-processedTxnCount
-duplicateCount
-successCount
-notFoundCount
-successTxnIds
-notFoundTxnIds
-
-Clean and operationally clear.
 
 ⸻
 
-8️⃣ One more improvement (very important for Ops APIs)
+7️⃣ Logging (important)
 
-You should limit request size:
+Also log duplicates:
 
-max 500 txnIds per request
+if (!duplicateTxnIds.isEmpty()) {
+    log.warn("Duplicate txnIds detected in admin ingest request: {}",
+             LogSanitizeUtil.sanitizeLogObj(duplicateTxnIds));
+}
 
-Otherwise someone can send 10,000 IDs and your API will hurt the DB.
-
-⸻
-
-✅ Final answer
-
-Yes — you should handle duplicates.
-But expose only:
-
-duplicateCount
-
-Not duplicateTxnIds.
+This helps debugging later.
 
 ⸻
 
-If you want, I can also show you one serious bug that can occur in your current bulk update logic (it can cause success responses even when nothing was updated). It’s a subtle but common issue in APIs like this.
+8️⃣ Final Advice
+
+For admin/debug APIs, it is totally acceptable to expose:
+	•	duplicates
+	•	skipped IDs
+	•	counts
+
+because the audience is internal operations teams, not external clients.
+
+Your approach is reasonable.
+
+⸻
+
+If you want, I can also show you one very clean response structure used in internal APIs at banks that makes debugging even easier (it avoids multiple arrays like success/notFound/duplicate and instead uses a single result object per txn).
