@@ -1,246 +1,91 @@
-Alright. I went through all your screenshots carefully. I’ll give you exact final versions of the two files so you can copy-paste without thinking, and then I’ll give you the final architecture verdict.
+Below is clean Confluence / Jira ready documentation.
+Everything uses standard Markdown tables, which Confluence and Jira both convert properly when pasted.
 
-No partial snippets. No guessing.
+You can copy-paste directly.
 
 ⸻
 
-1️⃣ Final File
+Admin Reprocess API Documentation
 
-AdminApiDelegateImpl.java
+Overview
 
-package com.td.dgvlm.api.delegate;
+The Admin Ingest API allows operations teams to manually trigger the reprocessing of ingestion transactions that previously failed.
 
-import com.td.dgvlm.openapi.api.AdminApiDelegate;
-import com.td.dgvlm.openapi.model.AdminIngestRequest;
-import com.td.dgvlm.openapi.model.AdminIngestRs;
-import com.td.dgvlm.service.AdminIngestService;
-import com.td.dgvlm.util.LogSanitizeUtil;
-import lombok.AllArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Service;
+This endpoint is primarily used for operational recovery scenarios when a transaction needs to be retried without waiting for automated retries or when manual intervention is required.
 
-@Slf4j
-@Service
-@AllArgsConstructor
-public class AdminApiDelegateImpl implements AdminApiDelegate {
+The API performs the following operations:
+	1.	Accepts a list of ingestion transaction IDs.
+	2.	Identifies duplicates in the request.
+	3.	Verifies which transactions exist in the database.
+	4.	Determines which transactions are eligible for reprocessing (STATUS = FAILURE).
+	5.	Updates eligible transactions from FAILURE → ERROR.
+	6.	Resets RETRY_COUNT to 0 so the scheduler can retry them.
+	7.	Returns detailed response metrics for operational visibility.
 
-    private final AdminIngestService adminIngestService;
+⸻
 
-    @Override
-    public ResponseEntity<AdminIngestRs> adminIngest(
-            String traceabilityID,
-            AdminIngestRequest adminIngestRequest) {
+Endpoint Details
 
-        log.info(
-                "Admin ingest API invoked with {} txnIds. traceabilityId={}",
-                adminIngestRequest.getTxnsToReprocess().size(),
-                LogSanitizeUtil.sanitizeLogObj(traceabilityID)
-        );
+Attribute	Value
+HTTP Method	PUT
+Endpoint	/admin/ingest
+Purpose	Reprocess failed ingestion transactions
+Authentication	Internal Admin API
+Triggered By	Operations / Support teams
 
-        AdminIngestRs response =
-                adminIngestService.reprocessTransactions(adminIngestRequest);
 
-        log.info(
-                "Admin ingest completed. requested={}, success={}, notFound={}, duplicates={}, otherThanFailure={}, traceabilityId={}",
-                response.getRequestedTxnCount(),
-                response.getSuccessCount(),
-                response.getNotFoundCount(),
-                response.getDuplicateCount(),
-                response.getOtherThanFailureStatusCount(),
-                LogSanitizeUtil.sanitizeLogObj(traceabilityID)
-        );
+⸻
 
-        return ResponseEntity.ok(response);
-    }
+Request Body
+
+Structure
+
+Field	Type	Required	Description
+txnsToReprocess	List	Yes	List of ingestion transaction IDs that should be reprocessed
+
+
+⸻
+
+Example Request
+
+{
+  "txnsToReprocess": [
+    "18adffed-ae96-4bb3-b866-3047a6e97b1e",
+    "19adffed-ae96-4bb3-b866-3047a6e97b1e",
+    "20adffed-ae96-4bb3-b866-3047a6e97b1e",
+    "21adffed-ae96-4bb3-b866-3047a6e97b1e",
+    "919ba9cb-6c10-4407-a5d2-2876cb93ca93",
+    "919ba9cb-6c10-4407-a5d2-2876cb93ca93"
+  ]
 }
 
+Note that duplicate transaction IDs may appear in the request.
 
 ⸻
 
-2️⃣ Final File
+Response Body
 
-AdminIngestService.java
+The response provides detailed metrics about how each transaction was processed.
 
-package com.td.dgvlm.service;
+⸻
 
-import com.td.dgvlm.openapi.model.AdminIngestRequest;
-import com.td.dgvlm.openapi.model.AdminIngestRs;
-import com.td.dgvlm.repository.StorTxnRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
+Response Fields
 
-import java.util.*;
-
-@Slf4j
-@Service
-@RequiredArgsConstructor
-public class AdminIngestService {
-
-    private final StorTxnRepository txnRepo;
-
-    public AdminIngestRs reprocessTransactions(AdminIngestRequest request) {
-
-        List<String> inputTxnIds = request.getTxnsToReprocess();
-
-        log.info("Admin ingest reprocess requested for {} transactions", inputTxnIds.size());
-
-        /*
-        Handle empty request
-         */
-        if (inputTxnIds.isEmpty()) {
-
-            AdminIngestRs response = new AdminIngestRs();
-
-            response.setRequestedTxnCount(0);
-            response.setSuccessCount(0);
-            response.setNotFoundCount(0);
-            response.setDuplicateCount(0);
-            response.setOtherThanFailureStatusCount(0);
-
-            response.setSuccessTxnIds(Collections.emptyList());
-            response.setNotFoundTxnIds(Collections.emptyList());
-            response.setDuplicateTxnIds(Collections.emptyList());
-            response.setOtherThanFailureStatusTxnIds(Collections.emptyList());
-
-            return response;
-        }
-
-        /*
-        Detect duplicates
-         */
-        Set<String> uniqueIds = new LinkedHashSet<>();
-        List<String> duplicateTxnIds = new ArrayList<>();
-
-        for (String id : inputTxnIds) {
-            if (!uniqueIds.add(id)) {
-                duplicateTxnIds.add(id);
-            }
-        }
-
-        List<String> requestedTxnIds = new ArrayList<>(uniqueIds);
-
-        if (!duplicateTxnIds.isEmpty()) {
-            log.warn("Duplicate txnIds detected in request: {}", duplicateTxnIds);
-        }
-
-        /*
-        Fetch transactions from DB
-         */
-        List<String> existingTxnIds = txnRepo.findExistingTxnIds(requestedTxnIds);
-        Set<String> existingSet = new HashSet<>(existingTxnIds);
-
-        /*
-        NOT FOUND
-         */
-        List<String> notFoundTxnIds = requestedTxnIds.stream()
-                .filter(id -> !existingSet.contains(id))
-                .toList();
-
-        /*
-        FAILURE status transactions
-         */
-        List<String> failureTxnIds = txnRepo.findFailureTxnIds(existingTxnIds);
-
-        Set<String> failureSet = new HashSet<>(failureTxnIds);
-
-        /*
-        OTHER THAN FAILURE
-         */
-        List<String> otherThanFailureStatusTxnIds = existingTxnIds.stream()
-                .filter(id -> !failureSet.contains(id))
-                .toList();
-
-        /*
-        Bulk update FAILURE -> ERROR
-         */
-        int updatedCount = 0;
-
-        if (!failureTxnIds.isEmpty()) {
-            updatedCount = txnRepo.updateStatusToErrorBulk(failureTxnIds);
-        }
-
-        log.info(
-                "Bulk update completed. Updated={}, NotFound={}, Duplicates={}, OtherThanFailure={}",
-                updatedCount,
-                notFoundTxnIds.size(),
-                duplicateTxnIds.size(),
-                otherThanFailureStatusTxnIds.size()
-        );
-
-        /*
-        Build response
-         */
-        AdminIngestRs response = new AdminIngestRs();
-
-        response.setRequestedTxnCount(inputTxnIds.size());
-
-        response.setSuccessCount(updatedCount);
-        response.setNotFoundCount(notFoundTxnIds.size());
-        response.setDuplicateCount(duplicateTxnIds.size());
-        response.setOtherThanFailureStatusCount(otherThanFailureStatusTxnIds.size());
-
-        response.setSuccessTxnIds(failureTxnIds);
-        response.setNotFoundTxnIds(notFoundTxnIds);
-        response.setDuplicateTxnIds(duplicateTxnIds);
-        response.setOtherThanFailureStatusTxnIds(otherThanFailureStatusTxnIds);
-
-        return response;
-    }
-}
+Field	Type	Description
+requestedTxnCount	Integer	Total transaction IDs received in request
+successCount	Integer	Number of transactions successfully reprocessed
+notFoundCount	Integer	Transactions that do not exist in the database
+duplicateCount	Integer	Duplicate transaction IDs detected in request
+otherThanFailureStatusCount	Integer	Transactions found but not eligible for reprocessing
+successTxnIds	List	Successfully reprocessed transaction IDs
+notFoundTxnIds	List	Transaction IDs not found in database
+duplicateTxnIds	List	Duplicate transaction IDs from request
+otherThanFailureStatusTxnIds	List	Transactions that were not in FAILURE state
 
 
 ⸻
 
-3️⃣ REQUIRED Repository Queries
-
-Your service requires these 3 queries.
-
-Query 1 — find existing txn ids
-
-@Query(value = """
-SELECT ingest_txn_id
-FROM stor_ingest_txn
-WHERE ingest_txn_id IN (:txnIds)
-""", nativeQuery = true)
-List<String> findExistingTxnIds(List<String> txnIds);
-
-
-⸻
-
-Query 2 — find FAILURE status txns
-
-@Query(value = """
-SELECT ingest_txn_id
-FROM stor_ingest_txn
-WHERE ingest_txn_id IN (:txnIds)
-AND status = 'FAILURE'
-""", nativeQuery = true)
-List<String> findFailureTxnIds(List<String> txnIds);
-
-
-⸻
-
-Query 3 — bulk update FAILURE → ERROR
-
-@Modifying
-@Transactional
-@Query(value = """
-UPDATE stor_ingest_txn
-SET status = 'ERROR',
-    last_update_dttm = SYSTIMESTAMP
-WHERE ingest_txn_id IN (:txnIds)
-AND status = 'FAILURE'
-""", nativeQuery = true)
-int updateStatusToErrorBulk(List<String> txnIds);
-
-
-⸻
-
-4️⃣ Example Response (Correct)
-
-Your Swagger example now makes sense:
+Example Response
 
 {
   "requestedTxnCount": 6,
@@ -248,94 +93,200 @@ Your Swagger example now makes sense:
   "notFoundCount": 3,
   "duplicateCount": 1,
   "otherThanFailureStatusCount": 1,
-  "successTxnIds": ["txn1","txn2"],
-  "notFoundTxnIds": ["txn3","txn4","txn5"],
-  "duplicateTxnIds": ["txn6"],
-  "otherThanFailureStatusTxnIds": ["txn7"]
+  "successTxnIds": [
+    "18adffed-ae96-4bb3-b866-3047a6e97b1e",
+    "19adffed-ae96-4bb3-b866-3047a6e97b1e"
+  ],
+  "notFoundTxnIds": [
+    "20adffed-ae96-4bb3-b866-3047a6e97b1e",
+    "21adffed-ae96-4bb3-b866-3047a6e97b1e",
+    "22adffed-ae96-4bb3-b866-3047a6e97b1e"
+  ],
+  "duplicateTxnIds": [
+    "919ba9cb-6c10-4407-a5d2-2876cb93ca93"
+  ],
+  "otherThanFailureStatusTxnIds": [
+    "18adffed-ae96-4bb3-b866-3047a6e97b1e"
+  ]
 }
 
-Ops team knows exactly what happened.
 
 ⸻
 
-5️⃣ Final Architecture Verdict (Important)
+Transaction Processing Logic
 
-This design is actually very good.
+The API processes transactions using the following steps:
 
-Why:
+Step	Description
+1	Receive transaction IDs from request
+2	Identify duplicate IDs in request
+3	Remove duplicates for processing
+4	Fetch existing transactions from database
+5	Identify transactions not present in database
+6	Identify transactions with status FAILURE
+7	Identify transactions with other statuses
+8	Update eligible transactions (FAILURE → ERROR)
+9	Reset retry count to 0
+10	Return aggregated response metrics
 
-✔ Ops visibility
-
-They know:
-	•	duplicates
-	•	not found
-	•	already processed
-	•	successfully reprocessed
-
-Huge operational clarity.
-
-⸻
-
-✔ Bulk processing
-
-Only 3 queries total
-
-1️⃣ find existing
-2️⃣ find failure
-3️⃣ bulk update
-
-No loops. No N+1 queries.
 
 ⸻
 
-✔ Safe
+Database Table
 
-Only updates FAILURE → ERROR
+STOR_INGEST_TXN
 
-You will never accidentally update SUCCESS or PROCESSING transactions.
+Column	Type	Description
+INGEST_TXN_ID	VARCHAR2(36)	Unique ingestion transaction identifier
+LOB_ID	VARCHAR2(50)	Line of business identifier
+TRACEABILITY_ID	VARCHAR2(50)	Request trace identifier
+DGVL_DRAWER_ID	VARCHAR2(50)	Drawer identifier
+DGVL_FOLDER_ID	VARCHAR2(50)	Folder identifier
+DGVL_FILE_TOKEN	VARCHAR2(50)	File token
+DGVL_FILE_NAME	VARCHAR2(50)	File name
+NAS_PATH	VARCHAR2(50)	NAS storage path
+STOR_TXN_ID	VARCHAR2(50)	Storage transaction identifier
+STOR_FILE_ID	VARCHAR2(50)	File identifier
+STOR_FILE_NAME	VARCHAR2(50)	Storage file name
+STOR_CONFIG_ID	NUMBER	Configuration reference
+STATUS	VARCHAR2(50)	Transaction status
+STATE	VARCHAR2(50)	Processing state
+RETRY_COUNT	NUMBER	Retry attempt counter
+CREATION_DTTM	TIMESTAMP	Record creation timestamp
+LAST_UPDATE_DTTM	TIMESTAMP	Last update timestamp
 
-⸻
-
-✔ Logging is correct
-
-Logs capture:
-	•	request size
-	•	success
-	•	not found
-	•	duplicates
-	•	wrong status
-
-Perfect for production debugging.
-
-⸻
-
-6️⃣ The ONLY improvement I would still add
-
-Protect the DB from large requests.
-
-Add validation:
-
-if (inputTxnIds.size() > 500) {
-    throw new IllegalArgumentException("Maximum 500 txnIds allowed");
-}
-
-Otherwise someone can send 20,000 IDs and kill your DB.
 
 ⸻
 
-7️⃣ Final Verdict
+Database Queries
 
-Your API now is:
+1. Fetch Existing Transactions
 
-Production-grade ✔
-Operationally transparent ✔
-Bulk optimized ✔
-Safe status handling ✔
-Well logged ✔
+SELECT INGEST_TXN_ID
+FROM STOR_INGEST_TXN
+WHERE INGEST_TXN_ID IN (:txnIds)
 
-If this were my code review at a bank, I would approve it.
+Purpose:
+
+Determines which transaction IDs exist in the system.
 
 ⸻
 
-If you want, I can also show you one very clever optimization that reduces the queries from 3 → 1 (and makes this API insanely fast).
-Most senior backend engineers miss that trick.
+2. Fetch Transactions in FAILURE Status
+
+SELECT INGEST_TXN_ID
+FROM STOR_INGEST_TXN
+WHERE INGEST_TXN_ID IN (:txnIds)
+AND STATUS = 'FAILURE'
+
+Purpose:
+
+Identifies transactions eligible for reprocessing.
+
+⸻
+
+3. Bulk Update Transactions
+
+UPDATE STOR_INGEST_TXN
+SET STATUS = 'ERROR',
+    RETRY_COUNT = 0,
+    LAST_UPDATE_DTTM = SYSTIMESTAMP
+WHERE INGEST_TXN_ID IN (:txnIds)
+AND STATUS = 'FAILURE'
+
+Purpose:
+	•	Moves transactions from FAILURE to ERROR
+	•	Resets retry count to allow scheduler retry
+	•	Updates audit timestamp
+
+⸻
+
+Status Transition
+
+Current Status	Action	New Status
+FAILURE	Admin Reprocess API	ERROR
+ERROR	Scheduler Retry	PROCESSING
+PROCESSING	Successful ingestion	SUCCESS
+ERROR	Retry limit reached	PERMANENT_FAILURE
+
+
+⸻
+
+Logging Strategy
+
+Two logs are generated during execution.
+
+API Invocation
+
+Admin ingest API invoked with {txnCount} txnIds. traceabilityId={traceId}
+
+API Completion
+
+Admin ingest completed. requested={count}, success={count}, notFound={count}, duplicates={count}, otherThanFailure={count}
+
+These logs allow operations teams to quickly identify processing results.
+
+⸻
+
+Operational Notes
+
+Scenario	Behavior
+Duplicate IDs in request	Returned in duplicateTxnIds
+Transaction not found	Returned in notFoundTxnIds
+Transaction already processed	Returned in otherThanFailureStatusTxnIds
+Valid failed transaction	Updated to ERROR
+Retry count	Reset to 0
+
+
+⸻
+
+Scheduler Interaction
+
+After the admin API updates transactions:
+
+STATUS = ERROR
+RETRY_COUNT = 0
+
+The ingestion scheduler will pick up these records and restart retry attempts.
+
+⸻
+
+Performance Considerations
+
+Area	Implementation
+Database calls	Bulk queries used
+Duplicate detection	In-memory using Set
+Updates	Single bulk update
+Indexing	INGEST_TXN_ID should be indexed
+
+
+⸻
+
+Recommended Index
+
+CREATE INDEX IDX_STOR_INGEST_TXN_ID
+ON STOR_INGEST_TXN (INGEST_TXN_ID);
+
+This ensures fast lookups for bulk transaction queries.
+
+⸻
+
+Summary
+
+The Admin Reprocess API provides a controlled mechanism to manually restart failed ingestion transactions while maintaining operational visibility and data integrity.
+
+Key capabilities include:
+	•	Duplicate detection
+	•	Transaction existence validation
+	•	Controlled status transitions
+	•	Retry counter reset
+	•	Detailed operational response reporting
+	•	Bulk database operations for performance
+
+⸻
+
+If you’d like, I can also give you a second section for Confluence called:
+
+“Sequence Diagram: Admin Reprocess Flow”
+
+That visual diagram makes this instantly understandable for architects and reviewers.
