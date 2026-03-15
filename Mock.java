@@ -2,15 +2,15 @@
 public class JmsConfig {
 
     @Bean
-    public ActiveMQConnectionFactory connectionFactory() {
+    public ActiveMQConnectionFactory activeMQConnectionFactory() {
         return new ActiveMQConnectionFactory("vm://embedded?broker.persistent=false");
     }
 
     @Bean
-    public JmsPoolConnectionFactory pooledConnectionFactory(ConnectionFactory connectionFactory) {
+    public ConnectionFactory connectionFactory(ActiveMQConnectionFactory activeMQConnectionFactory) {
 
         JmsPoolConnectionFactory pool = new JmsPoolConnectionFactory();
-        pool.setConnectionFactory(connectionFactory);
+        pool.setConnectionFactory(activeMQConnectionFactory);
         pool.setMaxConnections(5);
 
         return pool;
