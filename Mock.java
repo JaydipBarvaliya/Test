@@ -1,81 +1,120 @@
-Yes — I do see a likely problem in that filter, and you don’t necessarily need the whole logback.xml yet. The issue is visible in the snippet you shared. Let’s go through it carefully.
+Good idea. If you want to simulate the exact warning locally and test filters, keep it simple. You only need JMS + pooled-JMS + IBM MQ client (or any JMS broker) and then force a session rollback/connection issue.
+
+Below is the minimal setup.
 
 ⸻
 
-1️⃣ The Main Problem: message.contains(...) Is Too Strict
+1️⃣ Dependencies (Maven)
 
-Your filter currently checks:
+Add these:
 
-return message.contains("when putting session back into the pool, will invalidate. com.ibm.msg.client.jakarta.jms.DetailedJMSException: JMSCMQ0002: The method 'MQBACK' failed.");
+<dependency>
+    <groupId>org.messaginghub</groupId>
+    <artifactId>pooled-jms</artifactId>
+    <version>1.2.0</version>
+</dependency>
 
-But the actual log message looks like this:
+<dependency>
+    <groupId>com.ibm.mq</groupId>
+    <artifactId>mq-jms-spring-boot-starter</artifactId>
+    <version>2.7.2</version>
+</dependency>
 
-Caught exception trying close() when putting session back into the pool, will invalidate.
-com.ibm.msg.client.jakarta.jms.DetailedJMSException: JMSCMQ0002: The method 'MQBACK' failed
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-activemq</artifactId>
+</dependency>
 
-Important detail:
+Key one that generates the warning:
 
-👉 Logback splits lines and formats them.
-
-So the message variable typically contains only the first line of the log event, not the entire stack trace.
-
-That means your filter probably receives something like:
-
-Caught exception trying close() when putting session back into the pool, will invalidate.
-
-And NOT this part:
-
-JMSCMQ0002: The method 'MQBACK' failed
-
-So your filter string will never match.
-
-⸻
-
-2️⃣ The Correct Way to Match It
-
-Instead of matching the entire message, match a stable substring.
-
-For example:
-
-<expression>
-return message.contains("when putting session back into the pool");
-</expression>
-
-or even safer:
-
-<expression>
-return message.contains("JmsPoolSession.cleanupSession");
-</expression>
-
-or:
-
-<expression>
-return message.contains("MQBACK failed");
-</expression>
+pooled-jms
 
 
 ⸻
 
-3️⃣ Why Your Current Filter Probably Doesn’t Work
+2️⃣ Enable JMS Listener
 
-Because it expects this exact string:
+Create a listener that uses pooled sessions.
 
-when putting session back into the pool, will invalidate. com.ibm.msg.client...
+@JmsListener(destination = "TEST.QUEUE")
+public void receive(String msg) {
+    System.out.println("Received: " + msg);
 
-But the actual log output is:
+    throw new RuntimeException("Simulating failure");
+}
 
-line 1
-line 2
-
-And Logback filters only see line 1.
-
-So the filter never matches → log is not suppressed.
+This forces session rollback.
 
 ⸻
 
-4️⃣ The Fix I Recommend
+3️⃣ Configure Pooled JMS
 
-Change your filter to something simple and stable:
+Example config:
+
+@Bean
+public JmsPoolConnectionFactory pooledConnectionFactory(ConnectionFactory cf) {
+    JmsPoolConnectionFactory pool = new JmsPoolConnectionFactory();
+    pool.setConnectionFactory(cf);
+    pool.setMaxConnections(1);
+    pool.setMaxSessionsPerConnection(1);
+    return pool;
+}
+
+Using small pool size makes the problem appear faster.
+
+⸻
+
+4️⃣ Trigger the Warning
+
+Now force a pool cleanup issue.
+
+Simple ways:
+
+Option A (easiest)
+
+Kill the broker while the app is running.
+
+Result:
+
+WARN JmsPoolSession.cleanupSession
+MQBACK failed
+
+
+⸻
+
+Option B
+
+Throw exception in listener (as above) repeatedly.
+
+Spring will:
+
+rollback session
+return session to pool
+pool invalidates session
+
+This often triggers:
+
+Caught exception trying close() when putting session back into the pool
+
+
+⸻
+
+Option C (fastest simulation)
+
+Stop network access to the MQ port.
+
+Example:
+
+iptables -A OUTPUT -p tcp --dport 1414 -j DROP
+
+
+⸻
+
+5️⃣ Now Test Your Filter
+
+Add filter to logback-spring.xml.
+
+Example:
 
 <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
     <evaluator>
@@ -87,49 +126,34 @@ Change your filter to something simple and stable:
     <OnMatch>DENY</OnMatch>
 </filter>
 
-This will reliably match the warning.
+Restart app and verify:
+
+Before filter	After filter
+WARN printed	WARN suppressed
+
 
 ⸻
 
-5️⃣ Another Small Detail (Good News)
+6️⃣ Even Faster Way (Without MQ)
 
-Your filter placement is correct.
+If you just want to test filter, you can log the same message manually.
 
-It is inside the RollingFile appender, which is where the logs are written.
+logger.warn("Caught exception trying close() when putting session back into the pool, will invalidate.");
 
-So structurally it looks fine.
-
-⸻
-
-6️⃣ When I Would Ask for the Full File
-
-If after fixing the substring it still doesn’t work, then I would want to see:
-	•	entire logback-spring.xml
-	•	where the RollingFile appender is defined
-	•	root logger configuration
-
-Because sometimes logs are written to multiple appenders.
+That’s enough to validate filter logic.
 
 ⸻
 
-7️⃣ Quick Way to Test It
+Quick Summary
 
-To confirm the filter works locally:
+To reproduce Michael’s warning:
 
-Temporarily use this:
-
-return message.contains("JmsPoolSession")
-
-If the warning disappears, you know the filter is working and you just need the correct substring.
-
-⸻
-
-8️⃣ My Confidence
-
-Based on what you showed, I’m about 90% sure the issue is the overly long contains() string.
-
-Shortening it will likely fix the suppression.
+1️⃣ Add pooled-jms
+2️⃣ Create JMS listener
+3️⃣ Throw exception or kill broker
+4️⃣ Session cleanup warning appears
+5️⃣ Test Logback filter
 
 ⸻
 
-If you’d like, I can also show you a very robust Logback filter pattern used in production systems that suppresses JMS pool warnings safely without relying on fragile message text. It’s a much better long-term solution.
+If you want, I can also show you a much easier trick engineers use to simulate this warning in under 30 seconds without MQ, ActiveMQ, or JMS at all. It’s very useful when testing log filters.
