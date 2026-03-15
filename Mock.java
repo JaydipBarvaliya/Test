@@ -1,33 +1,62 @@
-Yes. I’ll show you the minimal structure so you can reproduce the warning cleanly. Nothing fancy. Just 3 pieces:
+Good question. To trigger the listener you must send a message to the queue. The easiest way in Spring Boot is to use JmsTemplate.
 
-1️⃣ enable JMS
-2️⃣ listener class
-3️⃣ pooled connection bean
+Below is the simplest way to do it.
 
 ⸻
 
-1️⃣ Enable JMS in Your Spring Boot App
+1️⃣ Add a Small Sender Component
 
-In your main Spring Boot application class (or any config class), add:
+Create a class like this:
 
-@SpringBootApplication
-@EnableJms
-public class DemoApplication {
+@Component
+public class TestSender {
 
-    public static void main(String[] args) {
-        SpringApplication.run(DemoApplication.class, args);
+    private final JmsTemplate jmsTemplate;
+
+    public TestSender(JmsTemplate jmsTemplate) {
+        this.jmsTemplate = jmsTemplate;
+    }
+
+    public void sendMessage() {
+        jmsTemplate.convertAndSend("TEST.QUEUE", "hello message");
     }
 }
 
-@EnableJms tells Spring to activate JMS listeners.
+This sends a message to:
+
+TEST.QUEUE
+
+Which will trigger your:
+
+@JmsListener(destination = "TEST.QUEUE")
+
+listener.
 
 ⸻
 
-2️⃣ Create a Listener Class
+2️⃣ Trigger It Automatically on Startup (Simplest)
 
-Create a simple component class.
+Add this to your main app:
 
-Example:
+@Bean
+CommandLineRunner run(TestSender sender) {
+    return args -> {
+        sender.sendMessage();
+    };
+}
+
+Now when the app starts:
+
+1️⃣ Spring starts
+2️⃣ message is sent to queue
+3️⃣ @JmsListener receives it
+4️⃣ exception occurs
+5️⃣ session cleanup happens
+6️⃣ you get the WARN log
+
+⸻
+
+3️⃣ Your Listener (Reminder)
 
 @Component
 public class TestListener {
@@ -37,124 +66,69 @@ public class TestListener {
 
         System.out.println("Received: " + message);
 
-        // Force failure so session rollback happens
         throw new RuntimeException("Simulating JMS failure");
     }
 }
 
-Where to put it?
-
-Anywhere under your Spring Boot base package, e.g.:
-
-com.example.demo.jms.TestListener
-
-Spring will automatically detect it.
+This forces rollback, which causes the pool cleanup warning.
 
 ⸻
 
-3️⃣ Add Pooled JMS Connection Factory
+4️⃣ What Happens Internally
 
-Create a configuration class.
-
-Example:
-
-@Configuration
-public class JmsConfig {
-
-    @Bean
-    public JmsPoolConnectionFactory pooledConnectionFactory(ConnectionFactory connectionFactory) {
-        JmsPoolConnectionFactory pool = new JmsPoolConnectionFactory();
-        pool.setConnectionFactory(connectionFactory);
-        pool.setMaxConnections(1);
-        pool.setMaxSessionsPerConnection(1);
-        return pool;
-    }
-}
-
-Yes — you can put this into any configuration class.
-
-Typical location:
-
-com.example.demo.config.JmsConfig
-
-
-⸻
-
-4️⃣ Add Dependencies (important)
-
-Minimal ones:
-
-<dependency>
-    <groupId>org.messaginghub</groupId>
-    <artifactId>pooled-jms</artifactId>
-</dependency>
-
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-activemq</artifactId>
-</dependency>
-
-pooled-jms is the library that generates:
-
+Sender → Queue → Listener
+                    │
+                    │ exception thrown
+                    ↓
+Spring rollback
+                    ↓
+Session returned to pool
+                    ↓
 JmsPoolSession.cleanupSession
+                    ↓
+WARN log generated
 
 
 ⸻
 
-5️⃣ Trigger the Warning
+5️⃣ If You Don’t Have a Real MQ
 
-Now do one of these:
+Use embedded ActiveMQ.
 
-easiest
+Add dependency:
 
-Send a message to the queue.
+<dependency>
+    <groupId>org.apache.activemq</groupId>
+    <artifactId>activemq-broker</artifactId>
+</dependency>
 
-Your listener throws exception → session rollback → pool cleanup.
+Spring Boot will start a local broker automatically.
 
-Eventually you’ll see:
+No MQ setup needed.
+
+⸻
+
+6️⃣ Expected Log
+
+Eventually you’ll see something like:
 
 WARN JmsPoolSession.cleanupSession
 Caught exception trying close() when putting session back into the pool
-MQBACK failed
 
-
-⸻
-
-6️⃣ Now Test Your Filter
-
-Add your filter to logback-spring.xml.
-
-Run again and check:
-
-Before filter	After filter
-WARN appears	WARN suppressed
-
+Now you can test your Logback filter.
 
 ⸻
 
-7️⃣ Even Simpler (If You Only Want to Test the Filter)
+Quick Summary
 
-You don’t even need JMS.
+To reproduce the warning:
 
-Just log the same message:
-
-logger.warn("Caught exception trying close() when putting session back into the pool, will invalidate.");
-
-If your filter works, that log will disappear.
-
-⸻
-
-Quick Architecture
-
-SpringBootApplication
-        │
-        │ @EnableJms
-        │
-        ├── TestListener (@JmsListener)
-        │
-        └── JmsConfig (JmsPoolConnectionFactory bean)
-
+1️⃣ Enable JMS
+2️⃣ Add @JmsListener
+3️⃣ Throw exception inside listener
+4️⃣ Send message using JmsTemplate
+5️⃣ Session rollback → pool cleanup → warning
 
 ⸻
 
-If you want, I can also show you the fastest 15-line Spring Boot project that reproduces this warning in under 2 minutes. It’s a very good testbed for JMS logging issues.
+If you want, I can also show you a much easier trick (10 lines only) to simulate this without JMS, MQ, ActiveMQ, or any broker just to test the Logback filter. It’s much faster for debugging.
