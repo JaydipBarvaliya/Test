@@ -1,18 +1,11 @@
-@Configuration
-public class JmsConfig {
+@Component
+public class LogSimulator {
 
-    @Bean
-    public ActiveMQConnectionFactory activeMQConnectionFactory() {
-        return new ActiveMQConnectionFactory("vm://embedded?broker.persistent=false");
-    }
+    private static final Logger log =
+        LoggerFactory.getLogger("org.messaginghub.pooled.jms.JmsPoolSession");
 
-    @Bean
-    public ConnectionFactory connectionFactory(ActiveMQConnectionFactory activeMQConnectionFactory) {
-
-        JmsPoolConnectionFactory pool = new JmsPoolConnectionFactory();
-        pool.setConnectionFactory(activeMQConnectionFactory);
-        pool.setMaxConnections(5);
-
-        return pool;
+    @PostConstruct
+    public void test() {
+        log.warn("Ignoring exception while closing JMS Session");
     }
 }
