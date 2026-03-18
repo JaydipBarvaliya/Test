@@ -1,127 +1,197 @@
-Good instinct 👍 — you’re thinking about performance. But don’t swing back into the same trap.
-
-Let’s be very clear:
-
-✅ Caching config = good
-❌ Mutating shared fields per request = bad
+Alright — I went through your DB diagram + both Java classes carefully.
+I’m going to be very direct so you don’t carry a hidden bug into prod.
 
 ⸻
 
-🔥 What you should do instead
+✅ First: Your DB design (correct)
 
-You can store both URLs, just not like this:
+From your diagram:
 
-this.batchDocUrl = ...
+PK: (INGEST_TXN_ID, BLOCK_NUM)
+FK: INGEST_TXN_ID → STOR_INGEST_TXN
 
-That’s the problem.
+✔ One-to-many (txn → chunks)
+✔ Composite PK (txn + block)
+✔ Resume capability supported
+
+So DB is perfectly aligned with your requirement 👍
 
 ⸻
 
-✅ Correct pattern (safe + fast)
+⚠️ Now the problem: Your JPA mapping is incomplete
 
-👉 Load once, store immutable values
+You currently have:
 
-private String defaultBatchDocUrl;
-private String tdiClaimsDevBatchDocUrl;
+@EmbeddedId
+private FileTrackingId id;
 
-@PostConstruct
-public void init() {
-    this.defaultBatchDocUrl = configurationProperties.getConfigProperty(
-        ApiConstants.DEFAULT,
-        ApiConstants.BATCHDOC_URL
-    );
+BUT you are missing the relationship mapping.
 
-    this.tdiClaimsDevBatchDocUrl = configurationProperties.getConfigProperty(
-        ApiConstants.TDI_CLAIMS_DEV,
-        ApiConstants.BATCHDOC_URL
-    );
+👉 Right now Hibernate does NOT know how this table connects to StorTransaction.
+
+⸻
+
+❌ What’s missing (critical)
+
+You need this:
+
+@MapsId("ingestTxnId")
+@ManyToOne(fetch = FetchType.LAZY)
+@JoinColumn(name = "INGEST_TXN_ID", nullable = false)
+private StorTransaction transaction;
+
+
+⸻
+
+Why this is important (don’t skip this)
+
+Without @MapsId:
+	•	JPA treats INGEST_TXN_ID in ID separately
+	•	And FK relationship separately
+	•	This leads to:
+	•	duplicate column mapping issues
+	•	weird insert/update bugs
+	•	Hibernate confusion
+
+With @MapsId, you tell Hibernate:
+
+INGEST_TXN_ID in PK == FK to parent
+
+
+⸻
+
+✅ Correct final entity (fix this)
+
+Your class should look like this:
+
+@Entity
+@Table(name = "STOR_INGEST_FILE_TRACKING")
+@Data
+@NoArgsConstructor
+public class StorIngestFileTracking {
+
+    @EmbeddedId
+    private FileTrackingId id;
+
+    @MapsId("ingestTxnId")   // 🔥 critical
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "INGEST_TXN_ID", nullable = false)
+    private StorTransaction transaction;
+
+    @Column(name = "HASH")
+    private String hash;
+
+    @Column(name = "STATUS")
+    private String status;
+
+    @Lob
+    @Column(name = "FILE_BLOCK")
+    private byte[] fileBlock;
 }
 
 
 ⸻
 
-👉 Then just SELECT, not MODIFY
+✅ Your ID class (this part is fine)
 
-private String resolveBatchDocUrl(String lobId) {
-    if (ApiConstants.TDI_CLAIMS_DEV.equals(lobId)) {
-        return tdiClaimsDevBatchDocUrl;
-    }
-    return defaultBatchDocUrl;
+@Embeddable
+@Data
+public class FileTrackingId implements Serializable {
+
+    @Column(name = "INGEST_TXN_ID", nullable = false)
+    private String ingestTxnId;
+
+    @Column(name = "BLOCK_NUM")
+    private int blockNum;
 }
 
+✔ This is correct
+✔ Matches DB PK
+✔ Nothing wrong here
 
 ⸻
 
-👉 Usage
+⚠️ Small improvement (important)
 
-String batchDocUrl = resolveBatchDocUrl(lobId);
+Change:
 
+private int blockNum;
 
-⸻
+to:
 
-💣 Why this works
-	•	✅ No mutation per request
-	•	✅ Thread-safe
-	•	✅ No repeated DB/config calls
-	•	✅ Fast lookup (just if/else)
+private Integer blockNum;
 
-⸻
+Why?
 
-⚠️ What you were about to do (don’t do this)
-
-You were heading toward:
-	•	“store one variable and keep switching it”
-
-That’s:
-	•	❌ shared mutable state
-	•	❌ race condition
-	•	❌ incorrect behavior
+👉 int = cannot be null → can cause issues during entity lifecycle
+👉 Integer = safer for JPA
 
 ⸻
 
-🧠 Think of it like this
+⚠️ Another issue: columnDefinition = "VARBINARY"
 
-Instead of:
+You wrote:
 
-“What is the current URL?”
+@Column(name = "FILE_BLOCK", columnDefinition = "VARBINARY")
 
-Think:
+But your DB is Oracle, not SQL Server.
 
-“Given this request, which URL should I use?”
+👉 Oracle uses:
 
-That mindset shift fixes the design.
+BLOB
+
+So fix it:
+
+@Lob
+@Column(name = "FILE_BLOCK")
+private byte[] fileBlock;
+
+Remove columnDefinition.
 
 ⸻
 
-🚀 Slightly better (scalable if more LOBs come)
+⚠️ Parent side (very important for consistency)
 
-If tomorrow you get 5 LOBs:
+In StorTransaction.java, you should have:
 
-private Map<String, String> batchDocUrlMap;
-
-@PostConstruct
-public void init() {
-    batchDocUrlMap = Map.of(
-        ApiConstants.DEFAULT, configurationProperties.getConfigProperty(...),
-        ApiConstants.TDI_CLAIMS_DEV, configurationProperties.getConfigProperty(...)
-    );
-}
-
-Then:
-
-private String resolveBatchDocUrl(String lobId) {
-    return batchDocUrlMap.getOrDefault(lobId, batchDocUrlMap.get(ApiConstants.DEFAULT));
-}
+@OneToMany(mappedBy = "transaction", fetch = FetchType.LAZY)
+private List<StorIngestFileTracking> fileChunks = new ArrayList<>();
 
 
 ⸻
 
-🧠 Final verdict (no sugarcoating)
-	•	Your concern about repeated fetching = valid 👍
-	•	Your original approach = unsafe ❌
-	•	The correct solution = cache once, never mutate
+✔ Final alignment check
+
+Layer	Status
+DB schema	✅ Correct
+Composite PK	✅ Correct
+Resume logic	✅ Supported
+ID class	✅ Correct
+Entity mapping	❌ Missing @MapsId
+BLOB mapping	⚠️ Needs fix
+
 
 ⸻
 
-If you want, next step I’d recommend:
-👉 Move this into a dedicated UrlResolver or ConfigService so your gateway stays clean.
+🧠 Bottom line
+
+👉 Kiruthika’s structure is conceptually correct
+👉 But implementation is missing one critical JPA piece (@MapsId)
+
+Without that, you’ll eventually hit:
+	•	weird persistence bugs
+	•	FK mismatch issues
+	•	duplicate column mapping errors
+
+⸻
+
+If you want next step
+
+I can help you with:
+
+✔ Repository queries for resume logic
+✔ Batch insert optimization (very important for chunks)
+✔ Retry-safe upload flow design
+✔ Confluence-ready diagram for this whole flow
+
+Just tell me 👍
