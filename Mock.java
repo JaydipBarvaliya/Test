@@ -219,3 +219,187 @@ If you want next level, I can help you:
 👉 Or create Confluence-ready doc like ESIGN one
 
 Just say 👍
+
+
+
+
+
+
+
+
+
+Good — this is already 80% solid 👍
+Now what you’re missing is real, meaningful comments + examples so people don’t misuse the table later.
+
+I’ll tighten this like production-grade documentation.
+
+⸻
+
+🔥 Updated Column Comments + Examples (Use this in Confluence)
+
+🔹 Identity & Correlation
+
+Column	Comment	Example
+ID	Unique identifier for each performance record	162345
+INGEST_TXN_ID	Foreign key reference to STOR_INGEST_TXN	10024567
+BATCH_ID	Batch identifier for grouped processing (if applicable)	BATCH_20260318_001
+TRACE_ID	Unique trace identifier for end-to-end request tracking across systems	42e03e50-88f6-11f0-9af8-aa0d9ae44bb5
+
+
+⸻
+
+🔹 Execution Context
+
+Column	Comment	Example
+MODULE_NAME	Logical component executing the step	INGEST_SERVICE, RETRY_SCHEDULER, CLEANUP_JOB
+STEP_NAME	Specific operation being executed	UPLOAD_TO_NAS, CALL_DGVLA, UPDATE_STATUS_DB
+TRANS_TYPE	Type of business operation	CREATE, RETRY, DELETE, REPROCESS
+
+👉 Important:
+	•	MODULE_NAME = who is executing
+	•	STEP_NAME = what exactly is happening
+
+⸻
+
+🔹 System Info (Infra Debugging)
+
+Column	Comment	Example
+APP_NAME	Application name generating the record	DGVLM, DGVLA
+HOST_NAME	Server/VM where process executed	craesigsbdzai10.dev.vmc2.td.com
+IP_ADDRESS	IP address of the executing node	10.44.222.176
+
+
+⸻
+
+🔹 Timing Metrics
+
+Column	Comment	Example
+START_TIME	Timestamp when processing started	18-MAR-26 10.15.30.123000
+END_TIME	Timestamp when processing completed	18-MAR-26 10.15.32.456000
+PROCESS_TIME_MS	Total execution time in milliseconds	2333
+
+👉 Always store PROCESS_TIME_MS
+Don’t calculate later — you’ll lose precision.
+
+⸻
+
+🔹 External Interaction
+
+Column	Comment	Example
+EXTERNAL_SYSTEM	External system invoked	DIGIVLA, BATCHDOC, NAS
+API_NAME	API endpoint or operation name	/uploadDocument, /createBatch
+API_RESPONSE_TIME	Response times of external APIs (semicolon-separated if multiple)	DV:364; FF_API:1306; NAS:598
+
+👉 Follow ESIGN pattern here — it’s actually useful.
+
+⸻
+
+🔹 Execution Result
+
+Column	Comment	Example
+STATUS	Final execution status	SUCCESS, FAILED, RETRY, PARTIAL_SUCCESS
+ERROR_CODE	System or business error code	DGVLM_5001, NAS_TIMEOUT
+ERROR_MESSAGE	Detailed error message (truncated if needed)	Failed to upload file to NAS due to timeout
+HTTP_STATUS_CODE	HTTP response code from external API	200, 500, 404
+
+👉 Important rule:
+	•	STATUS ≠ HTTP status
+	•	Internal failures can still have HTTP 200
+
+⸻
+
+🔹 Payload Metadata
+
+Column	Comment	Example
+FILE_COUNT	Number of files processed in this step	5
+
+👉 Optional (if you want to extend later):
+	•	TOTAL_SIZE_KB
+	•	RETRY_COUNT
+
+⸻
+
+🔥 Extra You Should Add (Small but powerful)
+
+You missed one thing 👇
+
+✅ Add this column
+
+RETRY_COUNT NUMBER(3)
+
+Why?
+	•	You are doing retries
+	•	You’ll want analytics like:
+
+How many retries before success?
+
+
+⸻
+
+🔥 Example Row (This is GOLD for docs)
+
+Put this in Confluence 👇
+
+ID: 1001
+INGEST_TXN_ID: 50021
+BATCH_ID: BATCH_20260318_01
+TRACE_ID: 42e03e50-88f6-11f0
+
+MODULE_NAME: INGEST_SERVICE
+STEP_NAME: UPLOAD_TO_NAS
+TRANS_TYPE: CREATE
+
+APP_NAME: DGVLM
+HOST_NAME: craesigsbdzai10.dev.vmc2.td.com
+IP_ADDRESS: 10.44.222.176
+
+START_TIME: 18-MAR-26 10:15:30
+END_TIME: 18-MAR-26 10:15:32
+PROCESS_TIME_MS: 2100
+
+EXTERNAL_SYSTEM: NAS
+API_NAME: /uploadFile
+API_RESPONSE_TIME: NAS:2100
+
+STATUS: SUCCESS
+ERROR_CODE: null
+ERROR_MESSAGE: null
+HTTP_STATUS_CODE: 200
+
+FILE_COUNT: 5
+
+
+⸻
+
+⚠️ Final Brutal Feedback
+
+You’re very close, but watch these:
+
+❌ Don’t make it “logging table”
+
+Make it analytics-ready table
+
+❌ Don’t leave comments vague
+
+Future devs WILL misuse fields
+
+❌ Don’t overload DETAILS
+
+Use structured columns first, then DETAILS
+
+⸻
+
+💯 Final Verdict
+
+✔ Your schema = strong
+✔ With these comments = production-ready
+✔ With retry_count = analytics-ready
+
+⸻
+
+If you want next level:
+
+👉 I can design dashboard queries (avg time per step, failure rate, retry heatmap)
+👉 Or help you auto-populate this using Spring AOP
+
+Just say 👍
