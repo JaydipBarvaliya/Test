@@ -1,48 +1,99 @@
--- =====================================================
--- DROP TABLE
--- =====================================================
-BEGIN
-    EXECUTE IMMEDIATE 'DROP TABLE PERF_STATS_API PURGE';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -942 THEN
-            RAISE;
-        END IF;
-END;
-/
+Good — this confirms exactly what I expected.
 
--- =====================================================
--- CREATE TABLE
--- =====================================================
-CREATE TABLE PERF_STATS_API (
-    ID                  NUMBER(20,0)        NOT NULL,
-    APP_ID              VARCHAR2(100 BYTE),
-    LOB_ID              VARCHAR2(100 BYTE),
-    TRACE_ID            VARCHAR2(100 BYTE),
-    CLIENT_ID           VARCHAR2(100 BYTE),
-    INET_ADDR           VARCHAR2(100 BYTE),
-    JVM_NAME            VARCHAR2(400 BYTE),
-    REQ_DATE            TIMESTAMP,
-    TRANS_TYPE          VARCHAR2(200 BYTE),
-    PACKAGE_ID          VARCHAR2(64 BYTE),
-    HTTP_STATUS_CD      VARCHAR2(500 BYTE),
-    PROCESS_TIME        NUMBER(10,0),
-    API_RESPONSE_TIME   VARCHAR2(500 BYTE),
-    DETAILS             VARCHAR2(4000 BYTE),
-    NBR_DOCS            NUMBER(2,0),
-    NBR_SIGNERS         NUMBER(3,0),
-    PDF_TRANSFORM       VARCHAR2(100 BYTE)
-);
+👉 You are in a locked-down RHEL (VMC2) environment
+👉 lnav is NOT available in your yum repos
+👉 And you’re not going to get it without admin/EPEL access
 
--- =====================================================
--- PRIMARY KEY
--- =====================================================
-ALTER TABLE PERF_STATS_API
-ADD CONSTRAINT PERF_STATS_ID
-PRIMARY KEY (ID);
+So stop trying to install it — it’s not going to work.
 
--- =====================================================
--- INDEX (as per seed)
--- =====================================================
-CREATE INDEX PERF_STATS_PACKAGE_ID_REQ_DATE
-ON PERF_STATS_API (PACKAGE_ID, REQ_DATE);
+⸻
+
+🔥 What you should do instead (real solution)
+
+You don’t need lnav.
+You can get 80–90% of the same value with bash only.
+
+⸻
+
+✅ Step 1 — Create a proper colored log function
+
+Edit:
+
+nano ~/.bashrc
+
+Add this:
+
+tlog() {
+  tail -f "$@" | sed \
+    -e 's/\(ERROR\)/\x1b[31m\1\x1b[0m/g' \
+    -e 's/\(WARN\)/\x1b[33m\1\x1b[0m/g' \
+    -e 's/\(INFO\)/\x1b[32m\1\x1b[0m/g' \
+    -e 's/\(Exception\)/\x1b[35m\1\x1b[0m/g'
+}
+
+Apply:
+
+source ~/.bashrc
+
+
+⸻
+
+🚀 Usage
+
+tlog app.log
+
+👉 Now your logs are:
+	•	ERROR → 🔴 red
+	•	WARN → 🟡 yellow
+	•	INFO → 🟢 green
+	•	Exception → 🟣 purple
+
+⸻
+
+🔥 Step 2 — Make it even cleaner (optional but powerful)
+
+Filter noise:
+
+tlogf() {
+  tail -f "$@" | grep --color=always -E "ERROR|WARN|INFO|Exception"
+}
+
+
+⸻
+
+💣 Step 3 — Shortcut for your project
+
+alias dglogs='tlog /opt/springboot/applications/dgvlm-api/logs/app.log'
+
+Now just:
+
+dglogs
+
+
+⸻
+
+🧠 Reality check (important mindset)
+
+In corporate infra like yours:
+	•	❌ You don’t install tools freely
+	•	❌ You don’t control repos
+	•	✅ You adapt using shell
+
+👉 This is exactly what senior engineers do.
+
+⸻
+
+👍 Bottom line
+
+👉 lnav not found = expected
+👉 Not a blocker
+👉 Your bash solution is enough and production-safe
+
+⸻
+
+If you want next level:
+	•	highlight stack traces differently
+	•	collapse repeated logs
+	•	show only failures in real-time
+
+I can give you a clean setup for that too.
