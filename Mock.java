@@ -24,9 +24,8 @@ class WorkHoursRegisterImpl implements WorkHoursRegister {
 
     @Override
     public boolean addWorker(String workerId, String position, int compensation) {
-        if (workers.containsKey(workerId)) {
-            return false;
-        }
+        if (workers.containsKey(workerId)) return false;
+
         workers.put(workerId, new Worker(position, compensation));
         return true;
     }
@@ -34,16 +33,12 @@ class WorkHoursRegisterImpl implements WorkHoursRegister {
     @Override
     public String register(String workerId, int timestamp) {
         Worker w = workers.get(workerId);
-        if (w == null) {
-            return "invalid_request";
-        }
+        if (w == null) return "invalid_request";
 
         if (!w.inOffice) {
-            // entering
             w.inOffice = true;
             w.lastEntryTime = timestamp;
         } else {
-            // leaving
             w.inOffice = false;
             w.totalTime += (timestamp - w.lastEntryTime);
             w.lastEntryTime = null;
@@ -55,9 +50,8 @@ class WorkHoursRegisterImpl implements WorkHoursRegister {
     @Override
     public Optional<Integer> get(String workerId) {
         Worker w = workers.get(workerId);
-        if (w == null) {
-            return Optional.empty();
-        }
+        if (w == null) return Optional.empty();
+
         return Optional.of(w.totalTime);
     }
 }
