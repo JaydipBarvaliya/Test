@@ -1,32 +1,4 @@
-@Override
-public int getGrantBonus(int start, int end) {
-
-    // check if exact grant exists
-    boolean exists = false;
-    for (int[] g : grants) {
-        if (g[0] == start && g[1] == end) {
-            exists = true;
-            break;
-        }
-    }
-
-    if (!exists) return 0;
-
-    int bonus = 0;
-
-    for (Worker w : workers.values()) {
-        for (Session s : w.sessions) {
-
-            // must be fully inside THIS grant
-            if (s.start >= start && s.end <= end) {
-
-                int duration = s.end - s.start;
-
-                // 🔥 bonus = extra 1x (not 2x)
-                bonus += duration * s.compensation;
-            }
-        }
-    }
-
-    return bonus;
-}
+Yeah that makes sense — local will always be a bit tricky with multiple certs.
+If we rely on JWKS + kid matching as primary, that should be more reliable anyway.
+For local, maybe we can iterate through all available certs instead of assuming one?
+That would remove the “latest only” limitation.
