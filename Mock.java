@@ -1,20 +1,32 @@
 @Override
-public Optional<Integer> calcSalary(String workerId, int start, int end) {
+public int getGrantBonus(int start, int end) {
 
-    Worker w = workers.get(workerId);
-    if (w == null) return Optional.empty();
-
-    int total = 0;
-
-    for (Session s : w.sessions) {
-
-        int overlapStart = Math.max(start, s.start);
-        int overlapEnd = Math.min(end, s.end);
-
-        if (overlapStart < overlapEnd) {
-            total += (overlapEnd - overlapStart) * s.compensation;
+    // check if exact grant exists
+    boolean exists = false;
+    for (int[] g : grants) {
+        if (g[0] == start && g[1] == end) {
+            exists = true;
+            break;
         }
     }
 
-    return Optional.of(total);
+    if (!exists) return 0;
+
+    int bonus = 0;
+
+    for (Worker w : workers.values()) {
+        for (Session s : w.sessions) {
+
+            // must be fully inside THIS grant
+            if (s.start >= start && s.end <= end) {
+
+                int duration = s.end - s.start;
+
+                // 🔥 bonus = extra 1x (not 2x)
+                bonus += duration * s.compensation;
+            }
+        }
+    }
+
+    return bonus;
 }
