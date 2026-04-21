@@ -1,32 +1,20 @@
 @Override
-public List<String> topNWorkers(int n, String position) {
+public Optional<Integer> calcSalary(String workerId, int start, int end) {
 
-    List<WorkerEntry> list = new ArrayList<>();
+    Worker w = workers.get(workerId);
+    if (w == null) return Optional.empty();
 
-    for (Map.Entry<String, Worker> entry : workers.entrySet()) {
-        Worker w = entry.getValue();
+    int total = 0;
 
-        if (w.position.equals(position)) {
-            list.add(new WorkerEntry(entry.getKey(), w.totalTime));
+    for (Session s : w.sessions) {
+
+        int overlapStart = Math.max(start, s.start);
+        int overlapEnd = Math.min(end, s.end);
+
+        if (overlapStart < overlapEnd) {
+            total += (overlapEnd - overlapStart) * s.compensation;
         }
     }
 
-    // sort:
-    // 1. totalTime DESC
-    // 2. workerId ASC
-    Collections.sort(list, (a, b) -> {
-        if (b.time != a.time) {
-            return b.time - a.time;
-        }
-        return a.id.compareTo(b.id);
-    });
-
-    List<String> result = new ArrayList<>();
-
-    for (int i = 0; i < Math.min(n, list.size()); i++) {
-        WorkerEntry e = list.get(i);
-        result.add(e.id + "(" + e.time + ")");
-    }
-
-    return result;
+    return Optional.of(total);
 }
