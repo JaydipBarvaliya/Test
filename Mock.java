@@ -1,57 +1,32 @@
-package com.codesignal.workhoursregister;
+@Override
+public List<String> topNWorkers(int n, String position) {
 
-import java.util.*;
+    List<WorkerEntry> list = new ArrayList<>();
 
-class WorkHoursRegisterImpl implements WorkHoursRegister {
+    for (Map.Entry<String, Worker> entry : workers.entrySet()) {
+        Worker w = entry.getValue();
 
-    static class Worker {
-        String position;
-        int compensation;
-
-        boolean inOffice = false;
-        Integer lastEntryTime = null;
-        int totalTime = 0;
-
-        Worker(String position, int compensation) {
-            this.position = position;
-            this.compensation = compensation;
+        if (w.position.equals(position)) {
+            list.add(new WorkerEntry(entry.getKey(), w.totalTime));
         }
     }
 
-    private Map<String, Worker> workers = new HashMap<>();
-
-    public WorkHoursRegisterImpl() {}
-
-    @Override
-    public boolean addWorker(String workerId, String position, int compensation) {
-        if (workers.containsKey(workerId)) return false;
-
-        workers.put(workerId, new Worker(position, compensation));
-        return true;
-    }
-
-    @Override
-    public String register(String workerId, int timestamp) {
-        Worker w = workers.get(workerId);
-        if (w == null) return "invalid_request";
-
-        if (!w.inOffice) {
-            w.inOffice = true;
-            w.lastEntryTime = timestamp;
-        } else {
-            w.inOffice = false;
-            w.totalTime += (timestamp - w.lastEntryTime);
-            w.lastEntryTime = null;
+    // sort:
+    // 1. totalTime DESC
+    // 2. workerId ASC
+    Collections.sort(list, (a, b) -> {
+        if (b.time != a.time) {
+            return b.time - a.time;
         }
+        return a.id.compareTo(b.id);
+    });
 
-        return "registered";
+    List<String> result = new ArrayList<>();
+
+    for (int i = 0; i < Math.min(n, list.size()); i++) {
+        WorkerEntry e = list.get(i);
+        result.add(e.id + "(" + e.time + ")");
     }
 
-    @Override
-    public Optional<Integer> get(String workerId) {
-        Worker w = workers.get(workerId);
-        if (w == null) return Optional.empty();
-
-        return Optional.of(w.totalTime);
-    }
+    return result;
 }
