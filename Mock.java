@@ -1,1 +1,1 @@
-Haha fair — it's basically a placeholder name for "something's accelerating expansion, no clue what." Same energy as calling a bug "intermittent issue" 😂
+Yeah it’s a placeholder. Could be vacuum energy, could be quintessence, could be modified gravity — we just know expansion is accelerating and something’s driving it.
