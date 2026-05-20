@@ -1,1 +1,1 @@
-Yeah it’s a placeholder. Could be vacuum energy, could be quintessence, could be modified gravity — we just know expansion is accelerating and something’s driving it.
+Adding it to the list. Constant thrust as gravity is a cool idea — works great until you stop accelerating and everyone starts floating mid-conversation 😂
