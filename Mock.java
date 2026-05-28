@@ -3,3 +3,9 @@ Thank you, Grace — but let’s be honest, not without your leadership! You mad
 Really enjoying the pace too. Being heard, leads open to new ideas, and the thought liberty to experiment — that’s the kind of environment where good engineering actually happens. And it’s got me thinking bigger: I have a backlog of frameworks, pipeline ideas, and code base improvements I’d love to bring forward. Plenty more we can build together.
 Thanks again,
 Jaydip
+
+
+
+
+Grace,
+Thank you — though credit where it’s due: not without your leadership. You set the direction and the rest of us just tried to keep up 🙂
