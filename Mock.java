@@ -1,1 +1,1 @@
-8HDTvyYum0lgAW
+Hi! Thanks for providing the shipping label. I just wanted to confirm: do I simply print this label, attach it to the package, and ship it, or do I need to pay any shipping charges out of my own pocket when I drop it off?
